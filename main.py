@@ -1,5 +1,5 @@
 """
-主程序 - 同态加密数据库演示
+主程序 - 同态加密安全数据库系统
 """
 
 import logging
@@ -12,7 +12,13 @@ import json
 from typing import Dict, Any, List, Optional, Tuple
 
 # 导入项目模块
-from config import DB_CONNECTION_STRING, ENCRYPTION_CONFIG, LOG_CONFIG, KEY_MANAGEMENT
+from config import (
+    DB_CONNECTION_STRING,
+    ENCRYPTION_CONFIG,
+    LOG_CONFIG,
+    KEY_MANAGEMENT,
+    PERFORMANCE_CONFIG,
+)
 from crypto.fhe import FHEManager
 from crypto.aes import AESManager
 from crypto.key_manager import KeyManager
@@ -29,15 +35,21 @@ logger = logging.getLogger(__name__)
 
 
 class SecureDB:
-    """安全数据库演示类"""
+    """安全数据库系统主类"""
 
-    def __init__(self, load_keys: bool = False, encrypt_only: bool = False):
+    def __init__(
+        self,
+        load_keys: bool = False,
+        encrypt_only: bool = False,
+        cache_size: int = None,
+    ):
         """
-        初始化演示
+        初始化安全数据库系统
 
         Args:
             load_keys: 是否从文件加载密钥
             encrypt_only: 是否仅用于加密（不需要私钥）
+            cache_size: 缓存大小，如果为None则使用配置文件中的值
         """
         # 确保密钥目录存在
         os.makedirs(KEY_MANAGEMENT["keys_dir"], exist_ok=True)
@@ -50,23 +62,25 @@ class SecureDB:
             ENCRYPTION_CONFIG["fhe"], self.key_manager, encrypt_only=encrypt_only
         )
 
-        # 初始化数据库管理器
-        self.db_manager = DatabaseManager(DB_CONNECTION_STRING)
+        # 初始化数据库管理器，使用LRU缓存
+        cache_size = cache_size or PERFORMANCE_CONFIG["cache_size"]
+        self.db_manager = DatabaseManager(DB_CONNECTION_STRING, cache_size=cache_size)
+        logger.info(f"初始化数据库管理器，缓存大小: {cache_size}")
 
         # 初始化AES管理器
         if load_keys:
             try:
                 # 从文件加载AES密钥
-                password = getpass.getpass("Enter password to decrypt AES key: ")
+                password = getpass.getpass("请输入密码以解密AES密钥: ")
                 aes_key = self.key_manager.load_aes_key(
                     KEY_MANAGEMENT["aes_key_file"], password
                 )
                 self.aes_manager = AESManager(key=aes_key)
-                logger.info("AES key loaded successfully")
+                logger.info("AES密钥加载成功")
             except Exception as e:
-                logger.error(f"Failed to load AES key: {e}")
+                logger.error(f"加载AES密钥失败: {e}")
                 # 如果加载失败，创建新的AES密钥
-                logger.info("Creating new AES key")
+                logger.info("创建新的AES密钥")
                 self.aes_manager = AESManager()
                 self._save_aes_key()
         else:
@@ -77,19 +91,33 @@ class SecureDB:
     def _save_aes_key(self):
         """保存AES密钥"""
         try:
-            password = getpass.getpass("Enter password to encrypt AES key: ")
-            confirm = getpass.getpass("Confirm password: ")
+            password = getpass.getpass("请输入密码以加密AES密钥: ")
+            confirm = getpass.getpass("确认密码: ")
 
             if password != confirm:
-                logger.error("Passwords do not match")
+                logger.error("密码不匹配")
                 return
 
             self.key_manager.save_aes_key(
                 self.aes_manager.get_key(), KEY_MANAGEMENT["aes_key_file"], password
             )
-            logger.info("AES key saved successfully")
+            logger.info("AES密钥保存成功")
         except Exception as e:
-            logger.error(f"Failed to save AES key: {e}")
+            logger.error(f"保存AES密钥失败: {e}")
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        获取缓存统计信息
+
+        Returns:
+            缓存统计信息字典
+        """
+        return self.db_manager.get_cache_stats()
+
+    def clear_caches(self) -> None:
+        """清除所有缓存"""
+        self.db_manager.clear_all_caches()
+        logger.info("所有缓存已清除")
 
     def add_record(
         self, index_value: int, data: str, enable_range_query: bool = False
@@ -125,11 +153,11 @@ class SecureDB:
             )
 
             elapsed = time.time() - start_time
-            logger.info(f"Added record with ID {record_id} in {elapsed:.3f} seconds")
+            logger.info(f"添加记录，ID: {record_id}，耗时: {elapsed:.3f}秒")
 
             return record_id
         except Exception as e:
-            logger.error(f"Error adding record: {e}")
+            logger.error(f"添加记录失败: {e}")
             raise
 
     def add_records_batch(self, records: List[Tuple[int, str, bool]]) -> List[int]:
@@ -171,13 +199,11 @@ class SecureDB:
             record_ids = self.db_manager.add_encrypted_records_batch(encrypted_records)
 
             elapsed = time.time() - start_time
-            logger.info(
-                f"Added {len(record_ids)} records in batch in {elapsed:.3f} seconds"
-            )
+            logger.info(f"批量添加记录，数量: {len(record_ids)}，耗时: {elapsed:.3f}秒")
 
             return record_ids
         except Exception as e:
-            logger.error(f"Error adding records in batch: {e}")
+            logger.error(f"批量添加记录失败: {e}")
             raise
 
     def get_record(self, record_id: int) -> Optional[str]:
@@ -202,13 +228,11 @@ class SecureDB:
             decrypted_data = self.aes_manager.decrypt(record.encrypted_data)
 
             elapsed = time.time() - start_time
-            logger.info(
-                f"Retrieved and decrypted record {record_id} in {elapsed:.3f} seconds"
-            )
+            logger.info(f"获取并解密记录，ID: {record_id}，耗时: {elapsed:.3f}秒")
 
             return decrypted_data.decode("utf-8")
         except Exception as e:
-            logger.error(f"Error retrieving record: {e}")
+            logger.error(f"获取记录失败: {e}")
             raise
 
     def get_records_batch(self, record_ids: List[int]) -> Dict[int, Optional[str]]:
@@ -243,12 +267,12 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"Retrieved and decrypted {len(records)} records in batch in {elapsed:.3f} seconds"
+                f"批量获取并解密记录，数量: {len(records)}，耗时: {elapsed:.3f}秒"
             )
 
             return result
         except Exception as e:
-            logger.error(f"Error retrieving records in batch: {e}")
+            logger.error(f"批量获取记录失败: {e}")
             raise
 
     def search_by_index(self, index_value: int) -> List[Dict[str, Any]]:
@@ -279,12 +303,12 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"Searched for index {index_value} and found {len(results)} records in {elapsed:.3f} seconds"
+                f"按索引搜索记录，索引值: {index_value}，找到: {len(results)}条记录，耗时: {elapsed:.3f}秒"
             )
 
             return results
         except Exception as e:
-            logger.error(f"Error searching records: {e}")
+            logger.error(f"搜索记录失败: {e}")
             raise
 
     def search_by_range(
@@ -319,12 +343,12 @@ class SecureDB:
             elapsed = time.time() - start_time
             range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
             logger.info(
-                f"Searched for range {range_str} and found {len(results)} records in {elapsed:.3f} seconds"
+                f"按范围搜索记录，范围: {range_str}，找到: {len(results)}条记录，耗时: {elapsed:.3f}秒"
             )
 
             return results
         except Exception as e:
-            logger.error(f"Error searching records by range: {e}")
+            logger.error(f"按范围搜索记录失败: {e}")
             raise
 
     def update_record(self, record_id: int, new_data: str) -> bool:
@@ -349,13 +373,13 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             if success:
-                logger.info(f"Updated record {record_id} in {elapsed:.3f} seconds")
+                logger.info(f"更新记录成功，ID: {record_id}，耗时: {elapsed:.3f}秒")
             else:
-                logger.info(f"Record {record_id} not found for update")
+                logger.info(f"更新记录失败，ID: {record_id}不存在")
 
             return success
         except Exception as e:
-            logger.error(f"Error updating record: {e}")
+            logger.error(f"更新记录失败: {e}")
             raise
 
     def update_records_batch(self, updates: List[Tuple[int, str]]) -> int:
@@ -384,12 +408,12 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"Updated {updated_count} records in batch in {elapsed:.3f} seconds"
+                f"批量更新记录，成功数量: {updated_count}，耗时: {elapsed:.3f}秒"
             )
 
             return updated_count
         except Exception as e:
-            logger.error(f"Error updating records in batch: {e}")
+            logger.error(f"批量更新记录失败: {e}")
             raise
 
     def delete_record(self, record_id: int) -> bool:
@@ -405,7 +429,7 @@ class SecureDB:
         try:
             return self.db_manager.delete_record(record_id)
         except Exception as e:
-            logger.error(f"Error deleting record: {e}")
+            logger.error(f"删除记录失败: {e}")
             raise
 
     def delete_records_batch(self, record_ids: List[int]) -> int:
@@ -421,7 +445,7 @@ class SecureDB:
         try:
             return self.db_manager.delete_records_batch(record_ids)
         except Exception as e:
-            logger.error(f"Error deleting records in batch: {e}")
+            logger.error(f"批量删除记录失败: {e}")
             raise
 
     def cleanup_references(self) -> int:
@@ -434,7 +458,7 @@ class SecureDB:
         try:
             return self.db_manager.cleanup_unused_references()
         except Exception as e:
-            logger.error(f"Error cleaning up references: {e}")
+            logger.error(f"清理未使用引用失败: {e}")
             raise
 
     def export_data(self, output_file: str, include_encrypted: bool = False) -> int:
@@ -473,7 +497,7 @@ class SecureDB:
                     decrypted_data = self.aes_manager.decrypt(record.encrypted_data)
                     record_data["data"] = decrypted_data.decode("utf-8")
                 except Exception as e:
-                    logger.error(f"Error decrypting data for record {record.id}: {e}")
+                    logger.error(f"解密记录数据失败，ID: {record.id}: {e}")
                     record_data["data"] = None
 
                 # 如果包含加密数据
@@ -489,12 +513,12 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"Exported {len(export_data)} records to {output_file} in {elapsed:.3f} seconds"
+                f"导出数据成功，记录数: {len(export_data)}，文件: {output_file}，耗时: {elapsed:.3f}秒"
             )
 
             return len(export_data)
         except Exception as e:
-            logger.error(f"Error exporting data: {e}")
+            logger.error(f"导出数据失败: {e}")
             raise
 
     def import_data(self, input_file: str, enable_range_query: bool = False) -> int:
@@ -531,7 +555,7 @@ class SecureDB:
                         )
                         continue
                     except Exception as e:
-                        logger.error(f"Error importing encrypted data: {e}")
+                        logger.error(f"导入加密数据失败: {e}")
 
                 # 否则，从明文数据创建新记录
                 if "data" in item and isinstance(item["data"], str):
@@ -547,7 +571,7 @@ class SecureDB:
                             )
                     except (json.JSONDecodeError, ValueError, KeyError):
                         # 如果解析失败，跳过该记录
-                        logger.warning(f"Skipping record with invalid data format")
+                        logger.warning(f"跳过格式无效的记录")
 
             # 批量添加记录
             if records:
@@ -555,59 +579,62 @@ class SecureDB:
 
                 elapsed = time.time() - start_time
                 logger.info(
-                    f"Imported {len(record_ids)} records from {input_file} in {elapsed:.3f} seconds"
+                    f"导入数据成功，记录数: {len(record_ids)}，文件: {input_file}，耗时: {elapsed:.3f}秒"
                 )
 
                 return len(record_ids)
             else:
-                logger.warning("No valid records found for import")
+                logger.warning("没有找到有效的记录可导入")
                 return 0
         except Exception as e:
-            logger.error(f"Error importing data: {e}")
+            logger.error(f"导入数据失败: {e}")
             raise
 
 
 def parse_args():
     """解析命令行参数"""
-    parser = argparse.ArgumentParser(description="Secure Database with FHE Indexing")
+    parser = argparse.ArgumentParser(description="基于同态加密的安全数据库系统")
 
-    parser.add_argument("--genkeys", action="store_true", help="Generate new keys")
+    parser.add_argument("--genkeys", action="store_true", help="生成新密钥")
     parser.add_argument(
         "--encrypt-only",
         action="store_true",
-        help="Encrypt-only mode (public key only)",
+        help="仅加密模式（只需要公钥）",
     )
-    parser.add_argument("--add", action="store_true", help="Add a new record")
-    parser.add_argument("--get", type=int, help="Get record by ID")
-    parser.add_argument("--search", type=int, help="Search records by index value")
-    parser.add_argument("--update", type=int, help="Update record by ID")
-    parser.add_argument("--delete", type=int, help="Delete record by ID")
-    parser.add_argument(
-        "--cleanup", action="store_true", help="Cleanup unused references"
-    )
-    parser.add_argument("--index", type=int, help="Index value for add operation")
-    parser.add_argument("--data", type=str, help="Data for add/update operation")
+    parser.add_argument("--add", action="store_true", help="添加新记录")
+    parser.add_argument("--get", type=int, help="通过ID获取记录")
+    parser.add_argument("--search", type=int, help="通过索引值搜索记录")
+    parser.add_argument("--update", type=int, help="通过ID更新记录")
+    parser.add_argument("--delete", type=int, help="通过ID删除记录")
+    parser.add_argument("--cleanup", action="store_true", help="清理未使用的引用")
+    parser.add_argument("--index", type=int, help="添加操作的索引值")
+    parser.add_argument("--data", type=str, help="添加/更新操作的数据")
 
-    parser.add_argument(
-        "--range", action="store_true", help="Enable range query for add operation"
-    )
-    parser.add_argument("--min", type=int, help="Minimum value for range search")
-    parser.add_argument("--max", type=int, help="Maximum value for range search")
-    parser.add_argument("--batch", action="store_true", help="Use batch operations")
+    parser.add_argument("--range", action="store_true", help="为添加操作启用范围查询")
+    parser.add_argument("--min", type=int, help="范围搜索的最小值")
+    parser.add_argument("--max", type=int, help="范围搜索的最大值")
+    parser.add_argument("--batch", action="store_true", help="使用批量操作")
     parser.add_argument(
         "--ids",
         type=str,
-        help="Comma-separated list of record IDs for batch operations",
+        help="批量操作的记录ID列表，以逗号分隔",
     )
-    parser.add_argument("--export", type=str, help="Export data to JSON file")
+    parser.add_argument("--export", type=str, help="导出数据到JSON文件")
     parser.add_argument(
-        "--import", dest="import_file", type=str, help="Import data from JSON file"
+        "--import", dest="import_file", type=str, help="从JSON文件导入数据"
     )
     parser.add_argument(
         "--include-encrypted",
         action="store_true",
-        help="Include encrypted data in export",
+        help="在导出中包含加密数据",
     )
+
+    # 缓存相关参数
+    parser.add_argument(
+        "--cache-size", type=int, help="设置自定义缓存大小（覆盖配置文件）"
+    )
+    parser.add_argument("--clear-cache", action="store_true", help="清除所有缓存")
+    parser.add_argument("--cache-stats", action="store_true", help="显示缓存统计信息")
 
     return parser.parse_args()
 
@@ -619,117 +646,133 @@ def main():
     try:
         if args.genkeys:
             # 生成新密钥
-            demo = SecureDB(load_keys=False, encrypt_only=False)
-            print("New keys generated successfully")
+            secure_db = SecureDB(
+                load_keys=False, encrypt_only=False, cache_size=args.cache_size
+            )
+            print("新密钥生成成功")
             return
 
-        # 初始化演示
-        demo = SecureDB(load_keys=True, encrypt_only=args.encrypt_only)
+        # 初始化安全数据库系统
+        secure_db = SecureDB(
+            load_keys=True, encrypt_only=args.encrypt_only, cache_size=args.cache_size
+        )
+
+        # 处理缓存相关命令
+        if args.clear_cache:
+            secure_db.clear_caches()
+            print("所有缓存已成功清除")
+            return
+
+        if args.cache_stats:
+            stats = secure_db.get_cache_stats()
+            print("缓存统计信息:")
+            print(json.dumps(stats, indent=2))
+            return
 
         if args.add:
             # 添加记录
             if args.index is None or args.data is None:
-                print("Error: --index and --data are required for add operation")
+                print("错误: 添加操作需要 --index 和 --data 参数")
                 return
 
-            record_id = demo.add_record(args.index, args.data, args.range)
-            print(f"Added record with ID: {record_id}")
+            record_id = secure_db.add_record(args.index, args.data, args.range)
+            print(f"已添加记录，ID: {record_id}")
 
         elif args.get is not None:
             # 获取记录
             if args.batch and args.ids:
                 # 批量获取
                 record_ids = [int(id_str) for id_str in args.ids.split(",")]
-                results = demo.get_records_batch(record_ids)
+                results = secure_db.get_records_batch(record_ids)
                 for record_id, data in results.items():
                     if data:
-                        print(f"Record {record_id}: {data}")
+                        print(f"记录 {record_id}: {data}")
                     else:
-                        print(f"Record {record_id} not found")
+                        print(f"记录 {record_id} 不存在")
             else:
                 # 单条获取
-                data = demo.get_record(args.get)
+                data = secure_db.get_record(args.get)
                 if data:
-                    print(f"Record {args.get}: {data}")
+                    print(f"记录 {args.get}: {data}")
                 else:
-                    print(f"Record {args.get} not found")
+                    print(f"记录 {args.get} 不存在")
 
         elif args.search is not None:
             # 搜索记录
-            results = demo.search_by_index(args.search)
+            results = secure_db.search_by_index(args.search)
             if results:
-                print(f"Found {len(results)} matching records:")
+                print(f"找到 {len(results)} 条匹配记录:")
                 for result in results:
-                    print(f"Record {result['id']}: {result['data']}")
+                    print(f"记录 {result['id']}: {result['data']}")
             else:
-                print("No matching records found")
+                print("未找到匹配记录")
 
         elif args.min is not None or args.max is not None:
             # 范围搜索
-            results = demo.search_by_range(args.min, args.max)
+            results = secure_db.search_by_range(args.min, args.max)
             if results:
-                print(f"Found {len(results)} records in range:")
+                print(f"在指定范围内找到 {len(results)} 条记录:")
                 for result in results:
-                    print(f"Record {result['id']}: {result['data']}")
+                    print(f"记录 {result['id']}: {result['data']}")
             else:
-                print("No records found in the specified range")
+                print("在指定范围内未找到记录")
 
         elif args.update is not None:
             # 更新记录
             if args.data is None:
-                print("Error: --data is required for update operation")
+                print("错误: 更新操作需要 --data 参数")
                 return
 
             if args.batch and args.ids:
                 # 批量更新
                 record_ids = [int(id_str) for id_str in args.ids.split(",")]
                 updates = [(record_id, args.data) for record_id in record_ids]
-                updated_count = demo.update_records_batch(updates)
-                print(f"Updated {updated_count} records")
+                updated_count = secure_db.update_records_batch(updates)
+                print(f"已更新 {updated_count} 条记录")
             else:
                 # 单条更新
-                success = demo.update_record(args.update, args.data)
+                success = secure_db.update_record(args.update, args.data)
                 if success:
-                    print(f"Record {args.update} updated successfully")
+                    print(f"记录 {args.update} 更新成功")
                 else:
-                    print(f"Record {args.update} not found")
+                    print(f"记录 {args.update} 不存在")
 
         elif args.delete is not None:
             # 删除记录
             if args.batch and args.ids:
                 # 批量删除
                 record_ids = [int(id_str) for id_str in args.ids.split(",")]
-                deleted_count = demo.delete_records_batch(record_ids)
-                print(f"Deleted {deleted_count} records")
+                deleted_count = secure_db.delete_records_batch(record_ids)
+                print(f"已删除 {deleted_count} 条记录")
             else:
                 # 单条删除
-                success = demo.delete_record(args.delete)
+                success = secure_db.delete_record(args.delete)
                 if success:
-                    print(f"Record {args.delete} deleted successfully")
+                    print(f"记录 {args.delete} 删除成功")
                 else:
-                    print(f"Record {args.delete} not found")
+                    print(f"记录 {args.delete} 不存在")
 
         elif args.cleanup:
             # 清理未使用的引用
-            count = demo.cleanup_references()
-            print(f"Cleaned up {count} unused references")
+            count = secure_db.cleanup_references()
+            print(f"已清理 {count} 个未使用的引用")
 
         elif args.export:
             # 导出数据
-            count = demo.export_data(args.export, args.include_encrypted)
-            print(f"Exported {count} records to {args.export}")
+            count = secure_db.export_data(args.export, args.include_encrypted)
+            print(f"已导出 {count} 条记录到 {args.export}")
 
         elif args.import_file:
             # 导入数据
-            count = demo.import_data(args.import_file, args.range)
-            print(f"Imported {count} records from {args.import_file}")
+            count = secure_db.import_data(args.import_file, args.range)
+            print(f"已从 {args.import_file} 导入 {count} 条记录")
 
         else:
-            print("No operation specified. Use --help for usage information.")
+            print("未指定操作。使用 --help 获取使用信息。")
 
     except Exception as e:
-        print(f"Error: {e}")
-        logger.exception("Unhandled exception")
+        print(f"错误: {e}")
+        logger.exception("未处理的异常")
         return 1
 
     return 0

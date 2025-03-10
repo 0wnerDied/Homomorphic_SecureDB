@@ -10,6 +10,7 @@ import xxhash
 from typing import List, Optional, Tuple
 
 from .models import EncryptedRecord, ReferenceTable, RangeQueryIndex, init_db
+from ..utils import LRUCache, timing_decorator
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +18,34 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """数据库管理器，处理数据库操作"""
 
-    def __init__(self, connection_string: str):
+    def __init__(self, connection_string: str, cache_size: int = 1000):
         """
         初始化数据库管理器
 
         Args:
             connection_string: 数据库连接字符串
+            cache_size: 缓存大小
         """
         try:
             self.engine = create_engine(connection_string)
             init_db(self.engine)  # 初始化数据库表
             self.Session = sessionmaker(bind=self.engine)
             self.reference_cache = {}  # 引用表缓存
-            logger.info("Database manager initialized successfully")
+
+            # 初始化LRU缓存
+            self.record_cache = LRUCache[int, EncryptedRecord](
+                capacity=cache_size
+            )  # 记录缓存
+            self.index_query_cache = LRUCache[int, List[int]](
+                capacity=cache_size
+            )  # 索引查询缓存
+            self.range_query_cache = LRUCache[str, List[int]](
+                capacity=cache_size
+            )  # 范围查询缓存
+
+            logger.info(
+                f"Database manager initialized successfully with cache size {cache_size}"
+            )
         except Exception as e:
             logger.error(f"Error initializing database: {e}")
             raise
@@ -70,6 +86,7 @@ class DatabaseManager:
 
         return ref.id
 
+    @timing_decorator
     def add_encrypted_record(
         self,
         encrypted_index: bytes,
@@ -110,6 +127,10 @@ class DatabaseManager:
                     session.add(range_index)
 
             session.commit()
+
+            # 更新缓存
+            self.record_cache.put(record.id, record)
+
             logger.info(f"Added encrypted record with ID {record.id}")
             return record.id
         except SQLAlchemyError as e:
@@ -119,6 +140,7 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @timing_decorator
     def add_encrypted_records_batch(
         self, records: List[Tuple[bytes, bytes, Optional[List[bytes]]]]
     ) -> List[int]:
@@ -135,6 +157,7 @@ class DatabaseManager:
         session = self.Session()
         try:
             record_ids = []
+            new_records = []
 
             for encrypted_index, encrypted_data, range_query_bits in records:
                 # 获取或创建引用
@@ -158,8 +181,14 @@ class DatabaseManager:
                         session.add(range_index)
 
                 record_ids.append(record.id)
+                new_records.append((record.id, record))
 
             session.commit()
+
+            # 更新缓存
+            for record_id, record in new_records:
+                self.record_cache.put(record_id, record)
+
             logger.info(f"Added {len(record_ids)} encrypted records in batch")
             return record_ids
         except SQLAlchemyError as e:
@@ -169,6 +198,7 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @timing_decorator
     def get_all_records(self) -> List[EncryptedRecord]:
         """
         获取所有加密记录
@@ -179,6 +209,11 @@ class DatabaseManager:
         session = self.Session()
         try:
             records = session.query(EncryptedRecord).all()
+
+            # 更新缓存
+            for record in records:
+                self.record_cache.put(record.id, record)
+
             logger.info(f"Retrieved {len(records)} encrypted records")
             return records
         except SQLAlchemyError as e:
@@ -197,6 +232,13 @@ class DatabaseManager:
         Returns:
             加密记录对象，如果不存在则返回None
         """
+        # 首先检查缓存
+        cached_record = self.record_cache.get(record_id)
+        if cached_record is not None:
+            logger.info(f"Cache hit: Retrieved record with ID {record_id} from cache")
+            return cached_record
+
+        # 缓存未命中，从数据库获取
         session = self.Session()
         try:
             record = (
@@ -204,10 +246,14 @@ class DatabaseManager:
                 .filter(EncryptedRecord.id == record_id)
                 .first()
             )
+
+            # 更新缓存
             if record:
-                logger.info(f"Retrieved record with ID {record_id}")
+                self.record_cache.put(record_id, record)
+                logger.info(f"Retrieved record with ID {record_id} (cache miss)")
             else:
                 logger.info(f"Record with ID {record_id} not found")
+
             return record
         except SQLAlchemyError as e:
             logger.error(f"Error retrieving record {record_id}: {e}")
@@ -225,14 +271,42 @@ class DatabaseManager:
         Returns:
             加密记录对象列表
         """
+        if not record_ids:
+            return []
+
+        # 首先从缓存获取
+        records = []
+        missing_ids = []
+
+        for record_id in record_ids:
+            cached_record = self.record_cache.get(record_id)
+            if cached_record is not None:
+                records.append(cached_record)
+            else:
+                missing_ids.append(record_id)
+
+        # 如果所有记录都在缓存中，直接返回
+        if not missing_ids:
+            logger.info(f"Cache hit: Retrieved all {len(records)} records from cache")
+            return records
+
+        # 否则，从数据库获取缺失的记录
         session = self.Session()
         try:
-            records = (
+            db_records = (
                 session.query(EncryptedRecord)
-                .filter(EncryptedRecord.id.in_(record_ids))
+                .filter(EncryptedRecord.id.in_(missing_ids))
                 .all()
             )
-            logger.info(f"Retrieved {len(records)} records by IDs")
+
+            # 更新缓存并添加到结果列表
+            for record in db_records:
+                self.record_cache.put(record.id, record)
+                records.append(record)
+
+            logger.info(
+                f"Retrieved {len(db_records)} records from database, {len(records) - len(db_records)} from cache"
+            )
             return records
         except SQLAlchemyError as e:
             logger.error(f"Error retrieving records by IDs: {e}")
@@ -240,6 +314,7 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @timing_decorator
     def search_by_encrypted_index(
         self, fhe_manager, query_value: int
     ) -> List[EncryptedRecord]:
@@ -253,16 +328,30 @@ class DatabaseManager:
         Returns:
             匹配的记录列表
         """
+        # 检查缓存
+        cached_result = self.index_query_cache.get(query_value)
+        if cached_result is not None:
+            logger.info(f"Cache hit: Using cached result for index query {query_value}")
+            return self.get_records_by_ids(cached_result)
+
         session = self.Session()
         try:
             all_records = session.query(EncryptedRecord).all()
             matching_records = []
+            matching_ids = []
 
             logger.info(f"Searching for records with index {query_value}")
             for record in all_records:
                 # 使用同态加密比较索引
                 if fhe_manager.compare_encrypted(record.encrypted_index, query_value):
                     matching_records.append(record)
+                    matching_ids.append(record.id)
+
+                    # 更新记录缓存
+                    self.record_cache.put(record.id, record)
+
+            # 更新查询结果缓存
+            self.index_query_cache.put(query_value, matching_ids)
 
             logger.info(f"Found {len(matching_records)} matching records")
             return matching_records
@@ -272,6 +361,7 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @timing_decorator
     def search_by_multiple_indices(
         self, fhe_manager, query_values: List[int]
     ) -> List[EncryptedRecord]:
@@ -285,20 +375,51 @@ class DatabaseManager:
         Returns:
             匹配的记录列表
         """
+        # 尝试从缓存获取每个查询值的结果
+        all_matching_ids = set()
+        uncached_values = []
+
+        for query_value in query_values:
+            cached_result = self.index_query_cache.get(query_value)
+            if cached_result is not None:
+                all_matching_ids.update(cached_result)
+            else:
+                uncached_values.append(query_value)
+
+        # 如果所有查询值都有缓存结果，直接返回
+        if not uncached_values:
+            logger.info(f"Cache hit: Using cached results for all index queries")
+            return self.get_records_by_ids(list(all_matching_ids))
+
         session = self.Session()
         try:
             all_records = session.query(EncryptedRecord).all()
             matching_records = []
 
+            # 为未缓存的查询值创建结果缓存
+            value_to_ids = {value: [] for value in uncached_values}
+
             logger.info(f"Searching for records with indices {query_values}")
             for record in all_records:
-                # 对每个查询值进行检查
-                for query_value in query_values:
+                # 对每个未缓存的查询值进行检查
+                for query_value in uncached_values:
                     if fhe_manager.compare_encrypted(
                         record.encrypted_index, query_value
                     ):
-                        matching_records.append(record)
+                        if record.id not in all_matching_ids:  # 避免重复
+                            matching_records.append(record)
+                            all_matching_ids.add(record.id)
+
+                            # 更新记录缓存
+                            self.record_cache.put(record.id, record)
+
+                        # 更新查询值到ID的映射
+                        value_to_ids[query_value].append(record.id)
                         break  # 一旦找到匹配，就不再检查其他查询值
+
+            # 更新查询结果缓存
+            for query_value, ids in value_to_ids.items():
+                self.index_query_cache.put(query_value, ids)
 
             logger.info(f"Found {len(matching_records)} matching records")
             return matching_records
@@ -308,6 +429,7 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @timing_decorator
     def search_by_range(
         self, fhe_manager, min_value: int = None, max_value: int = None
     ) -> List[EncryptedRecord]:
@@ -322,6 +444,15 @@ class DatabaseManager:
         Returns:
             匹配的记录列表
         """
+        # 创建范围查询的缓存键
+        range_key = f"{min_value if min_value is not None else '*'}-{max_value if max_value is not None else '*'}"
+
+        # 检查缓存
+        cached_result = self.range_query_cache.get(range_key)
+        if cached_result is not None:
+            logger.info(f"Cache hit: Using cached result for range query [{range_key}]")
+            return self.get_records_by_ids(cached_result)
+
         session = self.Session()
         try:
             # 获取所有记录ID
@@ -353,12 +484,13 @@ class DatabaseManager:
                 if in_range:
                     matching_record_ids.append(record_id)
 
+            # 更新范围查询缓存
+            self.range_query_cache.put(range_key, matching_record_ids)
+
             # 获取匹配的记录
             matching_records = self.get_records_by_ids(matching_record_ids)
 
-            logger.info(
-                f"Found {len(matching_records)} records in range [{min_value}, {max_value}]"
-            )
+            logger.info(f"Found {len(matching_records)} records in range [{range_key}]")
             return matching_records
         except SQLAlchemyError as e:
             logger.error(f"Error searching records by range: {e}")
@@ -392,6 +524,13 @@ class DatabaseManager:
             if record:
                 session.delete(record)
                 session.commit()
+
+                # 从缓存中移除
+                self.record_cache.remove(record_id)
+
+                # 清除可能包含此记录的查询缓存
+                self._invalidate_query_caches()
+
                 logger.info(f"Deleted record with ID {record_id}")
                 return True
             else:
@@ -429,6 +568,14 @@ class DatabaseManager:
             )
 
             session.commit()
+
+            # 从缓存中移除
+            for record_id in record_ids:
+                self.record_cache.remove(record_id)
+
+            # 清除查询缓存
+            self._invalidate_query_caches()
+
             logger.info(f"Deleted {deleted_count} records in batch")
             return deleted_count
         except SQLAlchemyError as e:
@@ -463,6 +610,10 @@ class DatabaseManager:
                 # 更新记录
                 record.encrypted_data = encrypted_data
                 session.commit()
+
+                # 更新缓存
+                self.record_cache.put(record_id, record)
+
                 logger.info(f"Updated record with ID {record_id}")
                 return True
             else:
@@ -504,6 +655,9 @@ class DatabaseManager:
                     record.encrypted_data = encrypted_data
                     updated_count += 1
 
+                    # 更新缓存
+                    self.record_cache.put(record_id, record)
+
             session.commit()
             logger.info(f"Updated {updated_count} records in batch")
             return updated_count
@@ -518,6 +672,34 @@ class DatabaseManager:
         """清除引用表缓存"""
         self.reference_cache.clear()
         logger.info("Reference cache cleared")
+
+    def clear_all_caches(self):
+        """清除所有缓存"""
+        self.reference_cache.clear()
+        self.record_cache.clear()
+        self.index_query_cache.clear()
+        self.range_query_cache.clear()
+        logger.info("All caches cleared")
+
+    def _invalidate_query_caches(self):
+        """当记录被修改或删除时，使查询缓存失效"""
+        self.index_query_cache.clear()
+        self.range_query_cache.clear()
+        logger.info("Query caches invalidated")
+
+    def get_cache_stats(self):
+        """
+        获取缓存统计信息
+
+        Returns:
+            包含各个缓存统计信息的字典
+        """
+        return {
+            "record_cache": self.record_cache.get_stats(),
+            "index_query_cache": self.index_query_cache.get_stats(),
+            "range_query_cache": self.range_query_cache.get_stats(),
+            "reference_cache_size": len(self.reference_cache),
+        }
 
     def cleanup_unused_references(self) -> int:
         """
