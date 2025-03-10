@@ -5,14 +5,22 @@
 import os
 
 # 数据库配置
-DB_CONFIG = {
+'''DB_CONFIG = {
     "username": "username",
     "password": "password",
     "host": "localhost",
     "port": "114514",
     "database": "test",
+}'''
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 5432,
+    "username": "privacy_db_test",
+    "password": "privacy_test_pwd",
+    "database": "aviation_privacy_test",
+    "admin_user": "0wnerd1ed",  # 使用标准的PostgreSQL管理员用户
+    "admin_password": "",
 }
-
 # 支持环境变量覆盖数据库配置
 DB_CONFIG.update(
     {
