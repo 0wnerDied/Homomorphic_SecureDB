@@ -7,7 +7,12 @@ import sys
 import logging
 from sqlalchemy import create_engine, text
 from sqlalchemy_utils import database_exists, drop_database
-from test_config import TEST_DB_CONFIG, TEST_KEY_CONFIG, PROJECT_ROOT
+from test_config import (
+    TEST_DB_CONFIG,
+    TEST_KEY_CONFIG,
+    PROJECT_ROOT,
+    ADMIN_DB_CONNECTION_STRING,
+)
 
 logger = logging.getLogger("测试环境清理")
 
@@ -16,9 +21,8 @@ def cleanup_test_database():
     """清理测试数据库和用户"""
     logger.info("开始清理测试数据库和用户...")
 
-    # 创建管理员连接
-    admin_connection_string = f"postgresql://{TEST_DB_CONFIG['admin_user']}:{TEST_DB_CONFIG['admin_password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/postgres"
-    engine = create_engine(admin_connection_string)
+    # 使用预定义的管理员连接字符串
+    engine = create_engine(ADMIN_DB_CONNECTION_STRING)
 
     try:
         # 检查并删除数据库

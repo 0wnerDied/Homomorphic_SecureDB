@@ -18,9 +18,15 @@ TEST_DB_CONFIG = {
     "user": "privacy_db_test",
     "password": "privacy_test_pwd",
     "database": "aviation_privacy_test",
-    "admin_user": "0wnerd1ed",  # PostgreSQL超级用户，用于创建测试数据库和用户
-    "admin_password": "",  # 留空表示使用操作系统认证
+    "admin_user": "0wnerd1ed",  # 使用标准的PostgreSQL管理员用户
+    "admin_password": "",
 }
+
+# 管理员数据库连接字符串（连接到postgres数据库）
+ADMIN_DB_CONNECTION_STRING = f"postgresql://{TEST_DB_CONFIG['admin_user']}:{TEST_DB_CONFIG['admin_password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/postgres"
+
+# 测试数据库连接字符串（连接到测试数据库）
+TEST_DB_CONNECTION_STRING = f"postgresql://{TEST_DB_CONFIG['user']}:{TEST_DB_CONFIG['password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/{TEST_DB_CONFIG['database']}"
 
 # 测试数据配置
 TEST_DATA_CONFIG = {
@@ -39,9 +45,6 @@ TEST_KEY_CONFIG = {
     "fhe_private_key": "test_fhe_private.key",
     "password": "privacy_secure_pwd",  # 用于加密密钥的密码
 }
-
-# 测试数据库连接字符串
-TEST_DB_CONNECTION_STRING = f"postgresql://{TEST_DB_CONFIG['user']}:{TEST_DB_CONFIG['password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/{TEST_DB_CONFIG['database']}"
 
 # 测试日志配置
 logging.basicConfig(
