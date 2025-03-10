@@ -28,6 +28,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 导入项目模块
 try:
     from core.secure_db import SecureDB
+    from core.config import KEY_MANAGEMENT
 except ImportError as e:
     logger = logging.getLogger("测试数据生成")
     logger.error(f"导入项目模块失败: {e}")
@@ -467,52 +468,67 @@ def generate_test_records():
             f"开始生成 {TEST_DATA_CONFIG['record_count']} 条民航客户隐私数据测试记录..."
         )
 
-        # 初始化安全数据库系统，使用测试配置
-        secure_db = SecureDB(
-            load_keys=True,
-            cache_size=TEST_DATA_CONFIG["cache_size"],
-            keys_dir=TEST_KEY_CONFIG["keys_dir"],
-        )
+        # 临时修改核心配置以使用测试配置
+        from core.config import KEY_MANAGEMENT
 
-        # 批量添加记录
-        batch_size = min(
-            TEST_DATA_CONFIG["batch_size"], TEST_DATA_CONFIG["record_count"]
-        )
-        batches = []
+        # 保存原始配置
+        original_keys_dir = KEY_MANAGEMENT["keys_dir"]
 
-        for i in range(0, TEST_DATA_CONFIG["record_count"], batch_size):
-            batch = []
-            for j in range(batch_size):
-                if i + j < TEST_DATA_CONFIG["record_count"]:
-                    customer_id = random.randint(*TEST_DATA_CONFIG["index_range"])
-                    data = generate_privacy_test_data(customer_id)
-                    # 对客户ID启用范围查询
-                    enable_range = True
-                    batch.append((customer_id, data, enable_range))
-            batches.append(batch)
+        # 应用测试配置
+        KEY_MANAGEMENT["keys_dir"] = TEST_KEY_CONFIG["keys_dir"]
 
-        # 执行批量添加
-        record_ids = []
-        total_added = 0
+        try:
+            # 初始化安全数据库系统，使用测试配置
+            secure_db = SecureDB(
+                load_keys=True,
+                cache_size=TEST_DATA_CONFIG["cache_size"],
+            )
 
-        for i, batch in enumerate(batches):
-            logger.info(f"添加批次 {i+1}/{len(batches)}，包含 {len(batch)} 条记录")
-            batch_ids = secure_db.add_records_batch(batch)
-            record_ids.extend(batch_ids)
-            total_added += len(batch_ids)
+            # 批量添加记录
+            batch_size = min(
+                TEST_DATA_CONFIG["batch_size"], TEST_DATA_CONFIG["record_count"]
+            )
+            batches = []
 
-        logger.info(f"成功生成 {total_added} 条测试记录")
+            for i in range(0, TEST_DATA_CONFIG["record_count"], batch_size):
+                batch = []
+                for j in range(batch_size):
+                    if i + j < TEST_DATA_CONFIG["record_count"]:
+                        customer_id = random.randint(*TEST_DATA_CONFIG["index_range"])
+                        data = generate_privacy_test_data(customer_id)
+                        # 对客户ID启用范围查询
+                        enable_range = True
+                        batch.append((customer_id, data, enable_range))
+                batches.append(batch)
 
-        # 保存记录ID列表，以便后续测试使用
-        record_ids_file = os.path.join(PROJECT_ROOT, "test", "record_ids.json")
-        with open(record_ids_file, "w") as f:
-            json.dump(record_ids, f)
-        logger.info(f"记录ID列表已保存: {record_ids_file}")
+            # 执行批量添加
+            record_ids = []
+            total_added = 0
 
-        return True
+            for i, batch in enumerate(batches):
+                logger.info(f"添加批次 {i+1}/{len(batches)}，包含 {len(batch)} 条记录")
+                batch_ids = secure_db.add_records_batch(batch)
+                record_ids.extend(batch_ids)
+                total_added += len(batch_ids)
+
+            logger.info(f"成功生成 {total_added} 条测试记录")
+
+            # 保存记录ID列表，以便后续测试使用
+            record_ids_file = os.path.join(PROJECT_ROOT, "test", "record_ids.json")
+            with open(record_ids_file, "w") as f:
+                json.dump(record_ids, f)
+            logger.info(f"记录ID列表已保存: {record_ids_file}")
+
+            return True
+        finally:
+            # 恢复原始配置
+            KEY_MANAGEMENT["keys_dir"] = original_keys_dir
 
     except Exception as e:
         logger.error(f"生成测试记录失败: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())  # 打印完整的异常堆栈
         return False
 
 
