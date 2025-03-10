@@ -10,8 +10,9 @@ from test_config import TEST_KEY_CONFIG, PROJECT_ROOT
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# 导入项目模块
+# 导入项目配置和模块
 try:
+    from config import ENCRYPTION_CONFIG
     from crypto.key_manager import KeyManager
     from crypto.aes import AESManager
     from crypto.fhe import FHEManager
@@ -46,21 +47,22 @@ def generate_test_keys():
         key_manager.save_aes_key(aes_key, aes_key_path, TEST_KEY_CONFIG["password"])
         logger.info(f"AES密钥已保存: {aes_key_path}")
 
-        # 初始化FHE管理器并生成密钥
+        # 使用主配置中的 FHE 配置，并修改密钥文件名
         logger.info("生成FHE密钥...")
-        fhe_manager = FHEManager({"key_size": 2048, "precision": 40}, key_manager)
+        fhe_config = ENCRYPTION_CONFIG["fhe"].copy()  # 复制一份以避免修改原配置
 
-        # 保存FHE密钥
-        public_key_path = os.path.join(keys_dir, TEST_KEY_CONFIG["fhe_public_key"])
-        private_key_path = os.path.join(keys_dir, TEST_KEY_CONFIG["fhe_private_key"])
-
-        key_manager.save_fhe_keys(
-            fhe_manager.public_key,
-            fhe_manager.private_key,
-            public_key_path,
-            private_key_path,
-            TEST_KEY_CONFIG["password"],
+        # 添加密钥文件名配置
+        fhe_config.update(
+            {
+                "context_file": "context.con",
+                "public_key_file": TEST_KEY_CONFIG["fhe_public_key"],
+                "private_key_file": TEST_KEY_CONFIG["fhe_private_key"],
+                "relin_key_file": "relin.key",
+            }
         )
+
+        # 初始化FHE管理器并生成密钥
+        fhe_manager = FHEManager(fhe_config, key_manager)
 
         logger.info(f"FHE密钥已生成并保存在: {keys_dir}")
         logger.info("测试密钥生成完成")
