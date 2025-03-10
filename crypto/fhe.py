@@ -125,7 +125,11 @@ class FHEManager:
         """加载FHE上下文和密钥"""
         try:
             # 加载加密参数
-            self.parms = seal.EncryptionParameters()
+            self.parms = seal.EncryptionParameters(
+                seal.scheme_type.bfv
+            )  # 使用BFV方案创建参数对象
+
+            # 从文件加载参数
             self.parms.load(self.context_file)
 
             # 创建上下文
