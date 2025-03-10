@@ -1,0 +1,4 @@
+__pycache__
+*.log
+*.txt
+test_config_override.py
