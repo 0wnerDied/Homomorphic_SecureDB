@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # 导入项目配置和模块
 try:
-    from config import ENCRYPTION_CONFIG
+    from core.config import ENCRYPTION_CONFIG
     from crypto.key_manager import KeyManager
     from crypto.aes import AESManager
     from crypto.fhe import FHEManager

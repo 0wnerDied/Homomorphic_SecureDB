@@ -27,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # 导入项目模块
 try:
-    from main import SecureDB
+    from core.secure_db import SecureDB
 except ImportError as e:
     logger = logging.getLogger("测试数据生成")
     logger.error(f"导入项目模块失败: {e}")

@@ -10,7 +10,7 @@ import xxhash
 from typing import List, Optional, Tuple
 
 from .models import EncryptedRecord, ReferenceTable, RangeQueryIndex, init_db
-from ..utils import LRUCache, timing_decorator
+from core.utils import LRUCache, timing_decorator
 
 logger = logging.getLogger(__name__)
 

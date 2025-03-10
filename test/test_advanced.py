@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # 导入项目模块
 try:
-    from main import SecureDB
+    from core.secure_db import SecureDB
     from generate_test_data import generate_privacy_test_data
 except ImportError as e:
     logger = logging.getLogger("高级功能测试")

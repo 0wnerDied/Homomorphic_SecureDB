@@ -16,7 +16,7 @@ SecureDB - 基于同态加密和AES的安全数据库系统
 """
 
 # 导入主程序
-from .main import SecureDB
+from .secure_db import SecureDB
 
 # 导入工具类
 from .utils import (
