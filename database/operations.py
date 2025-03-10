@@ -7,9 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 import xxhash
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from .models import EncryptedRecord, ReferenceTable, init_db
+from .models import EncryptedRecord, ReferenceTable, RangeQueryIndex, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,10 @@ class DatabaseManager:
         return ref.id
 
     def add_encrypted_record(
-        self, encrypted_index: bytes, encrypted_data: bytes
+        self,
+        encrypted_index: bytes,
+        encrypted_data: bytes,
+        range_query_bits: List[bytes] = None,
     ) -> int:
         """
         添加加密记录到数据库
@@ -79,6 +82,7 @@ class DatabaseManager:
         Args:
             encrypted_index: 加密的索引
             encrypted_data: 加密的数据（包含IV）
+            range_query_bits: 用于范围查询的加密位表示（可选）
 
         Returns:
             新记录的ID
@@ -93,12 +97,74 @@ class DatabaseManager:
                 encrypted_index=encrypted_index, encrypted_data=encrypted_data
             )
             session.add(record)
+            session.flush()  # 获取ID但不提交
+
+            # 如果提供了范围查询位，添加范围查询索引
+            if range_query_bits:
+                for bit_position, encrypted_bit in enumerate(range_query_bits):
+                    range_index = RangeQueryIndex(
+                        record_id=record.id,
+                        bit_position=bit_position,
+                        encrypted_bit=encrypted_bit,
+                    )
+                    session.add(range_index)
+
             session.commit()
             logger.info(f"Added encrypted record with ID {record.id}")
             return record.id
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Error adding encrypted record: {e}")
+            raise
+        finally:
+            session.close()
+
+    def add_encrypted_records_batch(
+        self, records: List[Tuple[bytes, bytes, Optional[List[bytes]]]]
+    ) -> List[int]:
+        """
+        批量添加加密记录到数据库
+
+        Args:
+            records: 记录列表，每个元素为(encrypted_index, encrypted_data, range_query_bits)元组
+                    range_query_bits可以为None
+
+        Returns:
+            新记录ID列表
+        """
+        session = self.Session()
+        try:
+            record_ids = []
+
+            for encrypted_index, encrypted_data, range_query_bits in records:
+                # 获取或创建引用
+                ref_id = self._get_or_create_reference(session, encrypted_data)
+
+                # 创建记录
+                record = EncryptedRecord(
+                    encrypted_index=encrypted_index, encrypted_data=encrypted_data
+                )
+                session.add(record)
+                session.flush()  # 获取ID但不提交
+
+                # 如果提供了范围查询位，添加范围查询索引
+                if range_query_bits:
+                    for bit_position, encrypted_bit in enumerate(range_query_bits):
+                        range_index = RangeQueryIndex(
+                            record_id=record.id,
+                            bit_position=bit_position,
+                            encrypted_bit=encrypted_bit,
+                        )
+                        session.add(range_index)
+
+                record_ids.append(record.id)
+
+            session.commit()
+            logger.info(f"Added {len(record_ids)} encrypted records in batch")
+            return record_ids
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error adding encrypted records in batch: {e}")
             raise
         finally:
             session.close()
@@ -145,6 +211,31 @@ class DatabaseManager:
             return record
         except SQLAlchemyError as e:
             logger.error(f"Error retrieving record {record_id}: {e}")
+            raise
+        finally:
+            session.close()
+
+    def get_records_by_ids(self, record_ids: List[int]) -> List[EncryptedRecord]:
+        """
+        通过ID列表获取多个加密记录
+
+        Args:
+            record_ids: 记录ID列表
+
+        Returns:
+            加密记录对象列表
+        """
+        session = self.Session()
+        try:
+            records = (
+                session.query(EncryptedRecord)
+                .filter(EncryptedRecord.id.in_(record_ids))
+                .all()
+            )
+            logger.info(f"Retrieved {len(records)} records by IDs")
+            return records
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving records by IDs: {e}")
             raise
         finally:
             session.close()
@@ -217,6 +308,64 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def search_by_range(
+        self, fhe_manager, min_value: int = None, max_value: int = None
+    ) -> List[EncryptedRecord]:
+        """
+        使用范围查询索引查询记录
+
+        Args:
+            fhe_manager: FHEManager实例，用于比较加密索引
+            min_value: 范围最小值，如果为None则不检查下限
+            max_value: 范围最大值，如果为None则不检查上限
+
+        Returns:
+            匹配的记录列表
+        """
+        session = self.Session()
+        try:
+            # 获取所有记录ID
+            record_ids = session.query(EncryptedRecord.id).distinct().all()
+            record_ids = [r[0] for r in record_ids]
+
+            # 获取每个记录的范围查询位
+            matching_record_ids = []
+
+            for record_id in record_ids:
+                # 获取记录的所有范围查询位
+                range_indices = (
+                    session.query(RangeQueryIndex)
+                    .filter(RangeQueryIndex.record_id == record_id)
+                    .order_by(RangeQueryIndex.bit_position)
+                    .all()
+                )
+
+                if not range_indices:
+                    continue  # 跳过没有范围查询索引的记录
+
+                # 提取加密位
+                encrypted_bits = [idx.encrypted_bit for idx in range_indices]
+
+                # 检查范围
+                in_range = fhe_manager.compare_range(
+                    encrypted_bits, min_value, max_value
+                )
+                if in_range:
+                    matching_record_ids.append(record_id)
+
+            # 获取匹配的记录
+            matching_records = self.get_records_by_ids(matching_record_ids)
+
+            logger.info(
+                f"Found {len(matching_records)} records in range [{min_value}, {max_value}]"
+            )
+            return matching_records
+        except SQLAlchemyError as e:
+            logger.error(f"Error searching records by range: {e}")
+            raise
+        finally:
+            session.close()
+
     def delete_record(self, record_id: int) -> bool:
         """
         删除加密记录
@@ -229,6 +378,12 @@ class DatabaseManager:
         """
         session = self.Session()
         try:
+            # 首先删除关联的范围查询索引
+            session.query(RangeQueryIndex).filter(
+                RangeQueryIndex.record_id == record_id
+            ).delete()
+
+            # 然后删除记录
             record = (
                 session.query(EncryptedRecord)
                 .filter(EncryptedRecord.id == record_id)
@@ -245,6 +400,40 @@ class DatabaseManager:
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Error deleting record {record_id}: {e}")
+            raise
+        finally:
+            session.close()
+
+    def delete_records_batch(self, record_ids: List[int]) -> int:
+        """
+        批量删除加密记录
+
+        Args:
+            record_ids: 要删除的记录ID列表
+
+        Returns:
+            成功删除的记录数量
+        """
+        session = self.Session()
+        try:
+            # 首先删除关联的范围查询索引
+            session.query(RangeQueryIndex).filter(
+                RangeQueryIndex.record_id.in_(record_ids)
+            ).delete(synchronize_session=False)
+
+            # 然后删除记录
+            deleted_count = (
+                session.query(EncryptedRecord)
+                .filter(EncryptedRecord.id.in_(record_ids))
+                .delete(synchronize_session=False)
+            )
+
+            session.commit()
+            logger.info(f"Deleted {deleted_count} records in batch")
+            return deleted_count
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error deleting records in batch: {e}")
             raise
         finally:
             session.close()
@@ -282,6 +471,45 @@ class DatabaseManager:
         except SQLAlchemyError as e:
             session.rollback()
             logger.error(f"Error updating record {record_id}: {e}")
+            raise
+        finally:
+            session.close()
+
+    def update_records_batch(self, updates: List[Tuple[int, bytes]]) -> int:
+        """
+        批量更新加密记录
+
+        Args:
+            updates: 更新列表，每个元素为(record_id, encrypted_data)元组
+
+        Returns:
+            成功更新的记录数量
+        """
+        session = self.Session()
+        try:
+            updated_count = 0
+
+            for record_id, encrypted_data in updates:
+                record = (
+                    session.query(EncryptedRecord)
+                    .filter(EncryptedRecord.id == record_id)
+                    .first()
+                )
+
+                if record:
+                    # 获取或创建引用
+                    ref_id = self._get_or_create_reference(session, encrypted_data)
+
+                    # 更新记录
+                    record.encrypted_data = encrypted_data
+                    updated_count += 1
+
+            session.commit()
+            logger.info(f"Updated {updated_count} records in batch")
+            return updated_count
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error updating records in batch: {e}")
             raise
         finally:
             session.close()

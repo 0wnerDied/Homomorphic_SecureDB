@@ -315,3 +315,170 @@ class FHEManager:
         self._encrypt_cache.clear()
         self._decrypt_cache.clear()
         self.cache_hits = 0
+
+    # 新增功能：范围查询支持
+    def encrypt_for_range_query(self, value: int, bits: int = 32) -> List[bytes]:
+        """
+        为范围查询加密整数值
+
+        Args:
+            value: 要加密的整数
+            bits: 位数，默认32位
+
+        Returns:
+            加密后的位表示列表
+        """
+        # 将整数转换为二进制表示
+        binary = bin(value)[2:].zfill(bits)
+        bit_values = [int(b) for b in binary]
+
+        # 加密每一位
+        encrypted_bits = []
+        for bit in bit_values:
+            encrypted_bit = self.encrypt_int(bit)
+            encrypted_bits.append(encrypted_bit)
+
+        return encrypted_bits
+
+    def compare_less_than(
+        self, encrypted_bits: List[bytes], query_value: int, bits: int = 32
+    ) -> bool:
+        """
+        比较加密值是否小于查询值
+
+        Args:
+            encrypted_bits: 加密的位表示列表
+            query_value: 要比较的查询值
+            bits: 位数，默认32位
+
+        Returns:
+            如果加密值小于查询值返回True，否则返回False
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot compare in encrypt-only mode")
+
+        # 将查询值转换为二进制表示
+        query_binary = bin(query_value)[2:].zfill(bits)
+        query_bits = [int(b) for b in query_binary]
+
+        # 实现比较逻辑
+        # 注意：这是一个简化实现，实际的FHE比较需要更复杂的电路
+        for i in range(bits):
+            # 从最高位开始比较
+            enc_bit = self.decrypt_int(encrypted_bits[i])
+            query_bit = query_bits[i]
+
+            if enc_bit < query_bit:
+                return True
+            elif enc_bit > query_bit:
+                return False
+
+        # 如果所有位都相等，则值相等
+        return False
+
+    def compare_greater_than(
+        self, encrypted_bits: List[bytes], query_value: int, bits: int = 32
+    ) -> bool:
+        """
+        比较加密值是否大于查询值
+
+        Args:
+            encrypted_bits: 加密的位表示列表
+            query_value: 要比较的查询值
+            bits: 位数，默认32位
+
+        Returns:
+            如果加密值大于查询值返回True，否则返回False
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot compare in encrypt-only mode")
+
+        # 将查询值转换为二进制表示
+        query_binary = bin(query_value)[2:].zfill(bits)
+        query_bits = [int(b) for b in query_binary]
+
+        # 实现比较逻辑
+        for i in range(bits):
+            # 从最高位开始比较
+            enc_bit = self.decrypt_int(encrypted_bits[i])
+            query_bit = query_bits[i]
+
+            if enc_bit > query_bit:
+                return True
+            elif enc_bit < query_bit:
+                return False
+
+        # 如果所有位都相等，则值相等
+        return False
+
+    def compare_range(
+        self,
+        encrypted_bits: List[bytes],
+        min_value: int = None,
+        max_value: int = None,
+        bits: int = 32,
+    ) -> bool:
+        """
+        比较加密值是否在指定范围内
+
+        Args:
+            encrypted_bits: 加密的位表示列表
+            min_value: 范围最小值，如果为None则不检查下限
+            max_value: 范围最大值，如果为None则不检查上限
+            bits: 位数，默认32位
+
+        Returns:
+            如果加密值在范围内返回True，否则返回False
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot compare in encrypt-only mode")
+
+        # 解密值进行比较（在实际应用中，应该使用同态操作而不是解密）
+        value = 0
+        for i in range(bits):
+            bit = self.decrypt_int(encrypted_bits[i])
+            if bit:
+                value |= 1 << (bits - 1 - i)
+
+        # 检查范围
+        if min_value is not None and value < min_value:
+            return False
+        if max_value is not None and value > max_value:
+            return False
+
+        return True
+
+    def batch_encrypt_int(self, values: List[int]) -> List[bytes]:
+        """
+        批量加密整数值
+
+        Args:
+            values: 要加密的整数列表
+
+        Returns:
+            加密后的字节列表
+        """
+        result = []
+        for value in values:
+            encrypted = self.encrypt_int(value)
+            result.append(encrypted)
+        return result
+
+    def batch_decrypt_int(self, encrypted_values: List[bytes]) -> List[int]:
+        """
+        批量解密整数值
+
+        Args:
+            encrypted_values: 加密的字节列表
+
+        Returns:
+            解密后的整数列表
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot decrypt in encrypt-only mode")
+
+        result = []
+        for encrypted in encrypted_values:
+            decrypted = self.decrypt_int(encrypted)
+            result.append(decrypted)
+        return result
