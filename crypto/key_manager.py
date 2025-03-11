@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class KeyManager:
-    """密钥管理器，处理FHE和AES密钥的安全存储和加载"""
+    """密钥管理器, 处理FHE和AES密钥的安全存储和加载"""
 
     def __init__(self, keys_dir: str):
         """
@@ -132,7 +132,7 @@ class KeyManager:
         使用密码解密AES密钥
 
         Args:
-            encrypted_data: 加密的数据（IV + 加密密钥）
+            encrypted_data: 加密的数据 (IV + 加密密钥) 
             salt: 用于密码派生的盐
             password: 用于解密的密码
 
@@ -173,7 +173,7 @@ class KeyManager:
             # 加密AES密钥
             encrypted_key, salt = self.encrypt_aes_key(aes_key, password)
 
-            # 准备保存的数据（salt + encrypted_key）
+            # 准备保存的数据 (salt + encrypted_key) 
             data_to_save = {"salt": salt, "encrypted_key": encrypted_key}
 
             # 保存到文件
@@ -238,14 +238,14 @@ class KeyManager:
             secret_key: 私钥数据
             public_key_file: 公钥文件名
             secret_key_file: 私钥文件名
-            password: 如果提供，将使用此密码加密私钥
+            password: 如果提供, 将使用此密码加密私钥
         """
         try:
             # 压缩公钥
             compressed_public_key = self.compress_data(public_key)
             self.save_file(compressed_public_key, public_key_file)
 
-            # 处理私钥（可选加密）
+            # 处理私钥 (可选加密) 
             compressed_secret_key = self.compress_data(secret_key)
 
             if password:
@@ -265,13 +265,13 @@ class KeyManager:
                 # 保存加密的私钥
                 self.save_file(encrypted_data, secret_key_file)
 
-                # 保存用于解密私钥的AES密钥（本身也是加密的）
+                # 保存用于解密私钥的AES密钥 (本身也是加密的) 
                 aes_key_file = f"{os.path.splitext(secret_key_file)[0]}_aes.key"
                 self.save_aes_key(aes_key, aes_key_file, password)
 
                 logger.info(f"Saved encrypted FHE secret key to {secret_key_file}")
             else:
-                # 不加密，直接保存压缩的私钥
+                # 不加密, 直接保存压缩的私钥
                 self.save_file(compressed_secret_key, secret_key_file)
                 logger.info(f"Saved unencrypted FHE secret key to {secret_key_file}")
 
@@ -308,7 +308,7 @@ class KeyManager:
 
         Args:
             secret_key_file: 私钥文件名
-            password: 如果私钥已加密，需提供密码
+            password: 如果私钥已加密, 需提供密码
 
         Returns:
             解压缩后的私钥数据
@@ -357,7 +357,7 @@ class KeyManager:
         password: Optional[str] = None,
     ) -> None:
         """
-        轮换FHE密钥对（保存新密钥并备份旧密钥）
+        轮换FHE密钥对 (保存新密钥并备份旧密钥) 
 
         Args:
             old_public_key_file: 旧公钥文件名
@@ -366,7 +366,7 @@ class KeyManager:
             new_secret_key: 新私钥数据
             new_public_key_file: 新公钥文件名
             new_secret_key_file: 新私钥文件名
-            password: 如果提供，将使用此密码加密新私钥
+            password: 如果提供, 将使用此密码加密新私钥
         """
         try:
             # 备份旧密钥
@@ -388,7 +388,7 @@ class KeyManager:
                     old_secret_key_path, self.get_key_path(backup_secret_key_file)
                 )
 
-                # 如果旧私钥有关联的AES密钥，也要备份
+                # 如果旧私钥有关联的AES密钥, 也要备份
                 old_aes_key_file = f"{os.path.splitext(old_secret_key_file)[0]}_aes.key"
                 old_aes_key_path = self.get_key_path(old_aes_key_file)
                 if os.path.exists(old_aes_key_path):
@@ -455,7 +455,7 @@ class KeyManager:
         生成密钥备份
 
         Args:
-            backup_dir: 备份目录，如果为None则使用默认目录
+            backup_dir: 备份目录, 如果为None则使用默认目录
 
         Returns:
             备份文件路径
@@ -491,7 +491,7 @@ class KeyManager:
 
         Args:
             backup_file: 备份文件路径
-            password: 如果提供，将验证密钥是否可以使用此密码解密
+            password: 如果提供, 将验证密钥是否可以使用此密码解密
         """
         try:
             # 创建临时目录
@@ -502,7 +502,7 @@ class KeyManager:
                 with tarfile.open(backup_file, "r:gz") as tar:
                     tar.extractall(path=temp_dir)
 
-                # 如果提供了密码，验证AES密钥
+                # 如果提供了密码, 验证AES密钥
                 if password is not None:
                     # 查找AES密钥文件
                     aes_key_files = [

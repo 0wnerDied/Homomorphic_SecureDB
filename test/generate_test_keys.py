@@ -19,7 +19,7 @@ try:
 except ImportError as e:
     logger = logging.getLogger("测试密钥生成")
     logger.error(f"导入项目模块失败: {e}")
-    logger.error("请确保项目结构正确，并且已安装所有依赖")
+    logger.error("请确保项目结构正确, 并且已安装所有依赖")
     sys.exit(1)
 
 logger = logging.getLogger("测试密钥生成")
@@ -47,7 +47,7 @@ def generate_test_keys():
         key_manager.save_aes_key(aes_key, aes_key_path, TEST_KEY_CONFIG["password"])
         logger.info(f"AES密钥已保存: {aes_key_path}")
 
-        # 使用主配置中的 FHE 配置，并修改密钥文件名
+        # 使用主配置中的 FHE 配置, 并修改密钥文件名
         logger.info("生成FHE密钥...")
         fhe_config = ENCRYPTION_CONFIG["fhe"].copy()  # 复制一份以避免修改原配置
 

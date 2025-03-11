@@ -21,7 +21,7 @@ try:
 except ImportError as e:
     logger = logging.getLogger("性能测试")
     logger.error(f"导入项目模块失败: {e}")
-    logger.error("请确保项目结构正确，并且已安装所有依赖")
+    logger.error("请确保项目结构正确, 并且已安装所有依赖")
     sys.exit(1)
 
 logger = logging.getLogger("性能测试")
@@ -64,7 +64,7 @@ class PerformanceTester:
 
     def test_add_performance(self, count=50, batch_size=10):
         """测试添加记录的性能"""
-        logger.info(f"测试添加记录性能 - {count} 条记录，批量大小 {batch_size}")
+        logger.info(f"测试添加记录性能 - {count} 条记录, 批量大小 {batch_size}")
 
         times = []
         for i in range(0, count, batch_size):
@@ -97,7 +97,7 @@ class PerformanceTester:
     def test_get_performance(self, iterations=100):
         """测试获取记录的性能"""
         if not self.record_ids:
-            logger.error("没有测试记录，无法测试获取性能")
+            logger.error("没有测试记录, 无法测试获取性能")
             return None
 
         logger.info(f"测试获取记录性能 - {iterations} 次随机获取")
@@ -127,7 +127,7 @@ class PerformanceTester:
     def test_search_performance(self, iterations=20):
         """测试索引搜索的性能"""
         if not self.customer_ids:
-            logger.error("没有测试客户ID，无法测试搜索性能")
+            logger.error("没有测试客户ID, 无法测试搜索性能")
             return None
 
         logger.info(f"测试索引搜索性能 - {iterations} 次随机搜索")
@@ -142,7 +142,7 @@ class PerformanceTester:
 
             times.append(elapsed)
             logger.debug(
-                f"搜索客户ID {customer_id} 找到 {len(results)} 条记录，耗时: {elapsed:.6f} 秒"
+                f"搜索客户ID {customer_id} 找到 {len(results)} 条记录, 耗时: {elapsed:.6f} 秒"
             )
 
         avg_time = statistics.mean(times)
@@ -160,7 +160,7 @@ class PerformanceTester:
     def test_range_search_performance(self, iterations=10, range_size=100):
         """测试范围搜索的性能"""
         logger.info(
-            f"测试范围搜索性能 - {iterations} 次随机范围搜索，范围大小 {range_size}"
+            f"测试范围搜索性能 - {iterations} 次随机范围搜索, 范围大小 {range_size}"
         )
 
         times = []
@@ -175,7 +175,7 @@ class PerformanceTester:
 
             times.append(elapsed)
             logger.debug(
-                f"范围搜索 {start_id}-{end_id} 找到 {len(results)} 条记录，耗时: {elapsed:.6f} 秒"
+                f"范围搜索 {start_id}-{end_id} 找到 {len(results)} 条记录, 耗时: {elapsed:.6f} 秒"
             )
 
         avg_time = statistics.mean(times)
@@ -194,7 +194,7 @@ class PerformanceTester:
     def test_update_performance(self, iterations=20):
         """测试更新记录的性能"""
         if not self.record_ids:
-            logger.error("没有测试记录，无法测试更新性能")
+            logger.error("没有测试记录, 无法测试更新性能")
             return None
 
         logger.info(f"测试更新记录性能 - {iterations} 次随机更新")
@@ -228,15 +228,15 @@ class PerformanceTester:
     def test_delete_performance(self, count=20, batch_size=5):
         """测试删除记录的性能"""
         if not self.record_ids:
-            logger.error("没有测试记录，无法测试删除性能")
+            logger.error("没有测试记录, 无法测试删除性能")
             return None
 
-        # 只使用部分记录进行删除测试，保留其他记录用于后续测试
+        # 只使用部分记录进行删除测试, 保留其他记录用于后续测试
         test_record_ids = self.record_ids[:count]
         self.record_ids = self.record_ids[count:]
 
         logger.info(
-            f"测试删除记录性能 - {len(test_record_ids)} 条记录，批量大小 {batch_size}"
+            f"测试删除记录性能 - {len(test_record_ids)} 条记录, 批量大小 {batch_size}"
         )
 
         times = []

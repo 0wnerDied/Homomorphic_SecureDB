@@ -46,8 +46,8 @@ class SecureDB:
 
         Args:
             load_keys: 是否从文件加载密钥
-            encrypt_only: 是否仅用于加密（不需要私钥）
-            cache_size: 缓存大小，如果为None则使用配置文件中的值
+            encrypt_only: 是否仅用于加密 (不需要私钥) 
+            cache_size: 缓存大小, 如果为None则使用配置文件中的值
         """
         # 确保密钥目录存在
         os.makedirs(KEY_MANAGEMENT["keys_dir"], exist_ok=True)
@@ -60,10 +60,10 @@ class SecureDB:
             ENCRYPTION_CONFIG["fhe"], self.key_manager, encrypt_only=encrypt_only
         )
 
-        # 初始化数据库管理器，使用LRU缓存
+        # 初始化数据库管理器, 使用LRU缓存
         cache_size = cache_size or PERFORMANCE_CONFIG["cache_size"]
         self.db_manager = DatabaseManager(DB_CONNECTION_STRING, cache_size=cache_size)
-        logger.info(f"初始化数据库管理器，缓存大小: {cache_size}")
+        logger.info(f"初始化数据库管理器, 缓存大小: {cache_size}")
 
         # 初始化AES管理器
         if load_keys:
@@ -77,7 +77,7 @@ class SecureDB:
                 logger.info("AES密钥加载成功")
             except Exception as e:
                 logger.error(f"加载AES密钥失败: {e}")
-                # 如果加载失败，创建新的AES密钥
+                # 如果加载失败, 创建新的AES密钥
                 logger.info("创建新的AES密钥")
                 self.aes_manager = AESManager()
                 self._save_aes_key()
@@ -137,7 +137,7 @@ class SecureDB:
             # 加密索引
             encrypted_index = self.fhe_manager.encrypt_int(index_value)
 
-            # 如果启用范围查询，创建范围查询索引
+            # 如果启用范围查询, 创建范围查询索引
             range_query_bits = None
             if enable_range_query:
                 range_query_bits = self.fhe_manager.encrypt_for_range_query(index_value)
@@ -151,7 +151,7 @@ class SecureDB:
             )
 
             elapsed = time.time() - start_time
-            logger.info(f"添加记录，ID: {record_id}，耗时: {elapsed:.3f}秒")
+            logger.info(f"添加记录, ID: {record_id}, 耗时: {elapsed:.3f}秒")
 
             return record_id
         except Exception as e:
@@ -163,7 +163,7 @@ class SecureDB:
         批量添加加密记录
 
         Args:
-            records: 记录列表，每个元素为(index_value, data, enable_range_query)元组
+            records: 记录列表, 每个元素为(index_value, data, enable_range_query)元组
 
         Returns:
             新记录ID列表
@@ -178,7 +178,7 @@ class SecureDB:
                 # 加密索引
                 encrypted_index = self.fhe_manager.encrypt_int(index_value)
 
-                # 如果启用范围查询，创建范围查询索引
+                # 如果启用范围查询, 创建范围查询索引
                 range_query_bits = None
                 if enable_range_query:
                     range_query_bits = self.fhe_manager.encrypt_for_range_query(
@@ -197,7 +197,7 @@ class SecureDB:
             record_ids = self.db_manager.add_encrypted_records_batch(encrypted_records)
 
             elapsed = time.time() - start_time
-            logger.info(f"批量添加记录，数量: {len(record_ids)}，耗时: {elapsed:.3f}秒")
+            logger.info(f"批量添加记录, 数量: {len(record_ids)}, 耗时: {elapsed:.3f}秒")
 
             return record_ids
         except Exception as e:
@@ -212,7 +212,7 @@ class SecureDB:
             record_id: 记录ID
 
         Returns:
-            解密后的数据，如果记录不存在则返回None
+            解密后的数据, 如果记录不存在则返回None
         """
         try:
             start_time = time.time()
@@ -226,7 +226,7 @@ class SecureDB:
             decrypted_data = self.aes_manager.decrypt(record.encrypted_data)
 
             elapsed = time.time() - start_time
-            logger.info(f"获取并解密记录，ID: {record_id}，耗时: {elapsed:.3f}秒")
+            logger.info(f"获取并解密记录, ID: {record_id}, 耗时: {elapsed:.3f}秒")
 
             return decrypted_data.decode("utf-8")
         except Exception as e:
@@ -241,7 +241,7 @@ class SecureDB:
             record_ids: 记录ID列表
 
         Returns:
-            记录ID到解密数据的映射，如果记录不存在则值为None
+            记录ID到解密数据的映射, 如果记录不存在则值为None
         """
         try:
             start_time = time.time()
@@ -265,7 +265,7 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"批量获取并解密记录，数量: {len(records)}，耗时: {elapsed:.3f}秒"
+                f"批量获取并解密记录, 数量: {len(records)}, 耗时: {elapsed:.3f}秒"
             )
 
             return result
@@ -281,7 +281,7 @@ class SecureDB:
             index_value: 要搜索的索引值
 
         Returns:
-            匹配记录的列表，每个记录包含ID和解密后的数据
+            匹配记录的列表, 每个记录包含ID和解密后的数据
         """
         try:
             start_time = time.time()
@@ -301,7 +301,7 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"按索引搜索记录，索引值: {index_value}，找到: {len(results)}条记录，耗时: {elapsed:.3f}秒"
+                f"按索引搜索记录, 索引值: {index_value}, 找到: {len(results)}条记录, 耗时: {elapsed:.3f}秒"
             )
 
             return results
@@ -316,11 +316,11 @@ class SecureDB:
         按索引范围搜索记录
 
         Args:
-            min_value: 范围最小值，如果为None则不检查下限
-            max_value: 范围最大值，如果为None则不检查上限
+            min_value: 范围最小值, 如果为None则不检查下限
+            max_value: 范围最大值, 如果为None则不检查上限
 
         Returns:
-            匹配记录的列表，每个记录包含ID和解密后的数据
+            匹配记录的列表, 每个记录包含ID和解密后的数据
         """
         try:
             start_time = time.time()
@@ -341,7 +341,7 @@ class SecureDB:
             elapsed = time.time() - start_time
             range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
             logger.info(
-                f"按范围搜索记录，范围: {range_str}，找到: {len(results)}条记录，耗时: {elapsed:.3f}秒"
+                f"按范围搜索记录, 范围: {range_str}, 找到: {len(results)}条记录, 耗时: {elapsed:.3f}秒"
             )
 
             return results
@@ -371,9 +371,9 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             if success:
-                logger.info(f"更新记录成功，ID: {record_id}，耗时: {elapsed:.3f}秒")
+                logger.info(f"更新记录成功, ID: {record_id}, 耗时: {elapsed:.3f}秒")
             else:
-                logger.info(f"更新记录失败，ID: {record_id}不存在")
+                logger.info(f"更新记录失败, ID: {record_id}不存在")
 
             return success
         except Exception as e:
@@ -385,7 +385,7 @@ class SecureDB:
         批量更新记录数据
 
         Args:
-            updates: 更新列表，每个元素为(record_id, new_data)元组
+            updates: 更新列表, 每个元素为(record_id, new_data)元组
 
         Returns:
             成功更新的记录数量
@@ -406,7 +406,7 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"批量更新记录，成功数量: {updated_count}，耗时: {elapsed:.3f}秒"
+                f"批量更新记录, 成功数量: {updated_count}, 耗时: {elapsed:.3f}秒"
             )
 
             return updated_count
@@ -495,7 +495,7 @@ class SecureDB:
                     decrypted_data = self.aes_manager.decrypt(record.encrypted_data)
                     record_data["data"] = decrypted_data.decode("utf-8")
                 except Exception as e:
-                    logger.error(f"解密记录数据失败，ID: {record.id}: {e}")
+                    logger.error(f"解密记录数据失败, ID: {record.id}: {e}")
                     record_data["data"] = None
 
                 # 如果包含加密数据
@@ -511,7 +511,7 @@ class SecureDB:
 
             elapsed = time.time() - start_time
             logger.info(
-                f"导出数据成功，记录数: {len(export_data)}，文件: {output_file}，耗时: {elapsed:.3f}秒"
+                f"导出数据成功, 记录数: {len(export_data)}, 文件: {output_file}, 耗时: {elapsed:.3f}秒"
             )
 
             return len(export_data)
@@ -541,7 +541,7 @@ class SecureDB:
             records = []
 
             for item in import_data:
-                # 如果数据包含加密索引，尝试直接使用
+                # 如果数据包含加密索引, 尝试直接使用
                 if "encrypted_index" in item and "encrypted_data" in item:
                     try:
                         encrypted_index = bytes.fromhex(item["encrypted_index"])
@@ -555,7 +555,7 @@ class SecureDB:
                     except Exception as e:
                         logger.error(f"导入加密数据失败: {e}")
 
-                # 否则，从明文数据创建新记录
+                # 否则, 从明文数据创建新记录
                 if "data" in item and isinstance(item["data"], str):
                     try:
                         # 尝试解析JSON数据
@@ -568,7 +568,7 @@ class SecureDB:
                                 (index_value, item["data"], enable_range_query)
                             )
                     except (json.JSONDecodeError, ValueError, KeyError):
-                        # 如果解析失败，跳过该记录
+                        # 如果解析失败, 跳过该记录
                         logger.warning(f"跳过格式无效的记录")
 
             # 批量添加记录
@@ -577,7 +577,7 @@ class SecureDB:
 
                 elapsed = time.time() - start_time
                 logger.info(
-                    f"导入数据成功，记录数: {len(record_ids)}，文件: {input_file}，耗时: {elapsed:.3f}秒"
+                    f"导入数据成功, 记录数: {len(record_ids)}, 文件: {input_file}, 耗时: {elapsed:.3f}秒"
                 )
 
                 return len(record_ids)

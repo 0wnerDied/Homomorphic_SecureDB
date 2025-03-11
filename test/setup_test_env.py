@@ -47,7 +47,7 @@ def create_test_database():
             )
             if result.fetchone():
                 logger.info(
-                    f"测试用户 {TEST_DB_CONFIG['user']} 已存在，将删除并重新创建"
+                    f"测试用户 {TEST_DB_CONFIG['user']} 已存在, 将删除并重新创建"
                 )
                 # 确保删除用户前删除其拥有的数据库
                 db_url = f"postgresql://{TEST_DB_CONFIG['admin_user']}:{TEST_DB_CONFIG['admin_password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/{TEST_DB_CONFIG['database']}"

@@ -17,7 +17,7 @@ class EncryptedRecord(Base):
 
     id = Column(Integer, primary_key=True)
     encrypted_index = Column(LargeBinary, nullable=False, index=True)  # BFV加密的索引
-    encrypted_data = Column(LargeBinary, nullable=False)  # AES加密的数据（包含IV）
+    encrypted_data = Column(LargeBinary, nullable=False)  # AES加密的数据 (包含IV) 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow

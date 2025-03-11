@@ -33,16 +33,16 @@ def run_script(script_name, description):
         success = result.returncode == 0
 
         if success:
-            logger.info(f"{description} 运行成功，耗时: {elapsed:.2f}秒")
+            logger.info(f"{description} 运行成功, 耗时: {elapsed:.2f}秒")
         else:
-            logger.error(f"{description} 运行失败，耗时: {elapsed:.2f}秒")
+            logger.error(f"{description} 运行失败, 耗时: {elapsed:.2f}秒")
             logger.error(f"错误输出: {result.stderr}")
 
         return success, elapsed
 
     except Exception as e:
         elapsed = time.time() - start_time
-        logger.error(f"{description} 运行异常: {e}，耗时: {elapsed:.2f}秒")
+        logger.error(f"{description} 运行异常: {e}, 耗时: {elapsed:.2f}秒")
         return False, elapsed
 
 
@@ -73,13 +73,13 @@ def run_all_tests():
         results[description] = {"success": success, "elapsed": elapsed}
         all_success = all_success and success
 
-        # 如果关键步骤失败，则中止后续测试
+        # 如果关键步骤失败, 则中止后续测试
         if not success and script in [
             "setup_test_env.py",
             "init_test_db.py",
             "generate_test_keys.py",
         ]:
-            logger.error(f"{description} 失败，中止后续测试")
+            logger.error(f"{description} 失败, 中止后续测试")
             break
 
     # 计算总耗时
@@ -111,7 +111,7 @@ def run_all_tests():
     if all_success:
         logger.info("所有测试全部通过!")
     else:
-        logger.warning("部分测试失败，请查看测试报告和日志获取详细信息")
+        logger.warning("部分测试失败, 请查看测试报告和日志获取详细信息")
 
     return all_success
 

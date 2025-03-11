@@ -18,7 +18,7 @@ try:
 except ImportError as e:
     logger = logging.getLogger("数据导入导出测试")
     logger.error(f"导入项目模块失败: {e}")
-    logger.error("请确保项目结构正确，并且已安装所有依赖")
+    logger.error("请确保项目结构正确, 并且已安装所有依赖")
     sys.exit(1)
 
 logger = logging.getLogger("数据导入导出测试")
@@ -54,7 +54,7 @@ def test_export_import():
             logger.info(f"成功导出 {export_count} 条记录")
         else:
             logger.error(
-                f"导出失败，预期 {len(record_ids)} 条，实际导出 {export_count} 条"
+                f"导出失败, 预期 {len(record_ids)} 条, 实际导出 {export_count} 条"
             )
             success = False
 
@@ -78,14 +78,14 @@ def test_export_import():
                 if imported_data == original_data:
                     logger.debug(f"记录 {record_id} 验证成功")
                 else:
-                    logger.error(f"记录 {record_id} 验证失败，数据不匹配")
+                    logger.error(f"记录 {record_id} 验证失败, 数据不匹配")
                     success = False
 
             # 清理导入的记录
             secure_db.delete_records_batch(import_result)
         else:
             logger.error(
-                f"导入失败，预期 {len(record_ids)} 条，实际导入 {len(import_result) if import_result else 0} 条"
+                f"导入失败, 预期 {len(record_ids)} 条, 实际导入 {len(import_result) if import_result else 0} 条"
             )
             success = False
 

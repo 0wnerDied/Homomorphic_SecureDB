@@ -32,7 +32,7 @@ try:
 except ImportError as e:
     logger = logging.getLogger("测试数据生成")
     logger.error(f"导入项目模块失败: {e}")
-    logger.error("请确保项目结构正确，并且已安装所有依赖")
+    logger.error("请确保项目结构正确, 并且已安装所有依赖")
     sys.exit(1)
 
 logger = logging.getLogger("测试数据生成")
@@ -227,13 +227,13 @@ def generate_random_id_card():
     # 出生日期
     year = random.randint(1950, 2003)
     month = random.randint(1, 12)
-    day = random.randint(1, 28)  # 简化处理，避免月份天数问题
+    day = random.randint(1, 28)  # 简化处理, 避免月份天数问题
     birth_date = f"{year}{month:02d}{day:02d}"
 
     # 顺序码
     sequence = f"{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}"
 
-    # 校验码（简化处理，实际应该根据前17位计算）
+    # 校验码 (简化处理, 实际应该根据前17位计算) 
     check_code = random.choice("0123456789X")
 
     return (
@@ -248,7 +248,7 @@ def generate_random_passport():
 
 
 def generate_random_credit_card():
-    """生成随机信用卡号（模拟）"""
+    """生成随机信用卡号 (模拟) """
     # 常见信用卡前缀
     prefixes = ["4", "5", "6"]  # Visa, MasterCard, 银联等
 
@@ -263,7 +263,7 @@ def generate_random_date(start_year=2020, end_year=2025):
     """生成随机日期"""
     year = random.randint(start_year, end_year)
     month = random.randint(1, 12)
-    day = random.randint(1, 28)  # 简化处理，避免月份天数问题
+    day = random.randint(1, 28)  # 简化处理, 避免月份天数问题
 
     return f"{year}-{month:02d}-{day:02d}"
 
@@ -272,7 +272,7 @@ def generate_privacy_test_data(customer_id: int) -> str:
     """生成民航客户隐私数据"""
     data_type = random.choice(PRIVACY_DATA_TYPES)
 
-    # 生成通用的客户姓名，用于各种数据类型
+    # 生成通用的客户姓名, 用于各种数据类型
     customer_name = generate_random_name()
 
     if data_type == "个人基本信息":
@@ -331,7 +331,7 @@ def generate_privacy_test_data(customer_id: int) -> str:
         elif id_type == "护照":
             id_number = generate_random_passport()
         else:
-            # 其他证件类型，生成通用格式
+            # 其他证件类型, 生成通用格式
             id_number = "".join(
                 random.choices(string.ascii_uppercase + string.digits, k=9)
             )
@@ -478,7 +478,7 @@ def generate_test_records():
         KEY_MANAGEMENT["keys_dir"] = TEST_KEY_CONFIG["keys_dir"]
 
         try:
-            # 初始化安全数据库系统，使用测试配置
+            # 初始化安全数据库系统, 使用测试配置
             secure_db = SecureDB(
                 load_keys=True,
                 cache_size=TEST_DATA_CONFIG["cache_size"],
@@ -506,14 +506,14 @@ def generate_test_records():
             total_added = 0
 
             for i, batch in enumerate(batches):
-                logger.info(f"添加批次 {i+1}/{len(batches)}，包含 {len(batch)} 条记录")
+                logger.info(f"添加批次 {i+1}/{len(batches)}, 包含 {len(batch)} 条记录")
                 batch_ids = secure_db.add_records_batch(batch)
                 record_ids.extend(batch_ids)
                 total_added += len(batch_ids)
 
             logger.info(f"成功生成 {total_added} 条测试记录")
 
-            # 保存记录ID列表，以便后续测试使用
+            # 保存记录ID列表, 以便后续测试使用
             record_ids_file = os.path.join(PROJECT_ROOT, "test", "record_ids.json")
             with open(record_ids_file, "w") as f:
                 json.dump(record_ids, f)

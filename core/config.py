@@ -67,7 +67,7 @@ KEY_MANAGEMENT = {
     "backup_dir": os.path.join(
         os.path.expanduser("~/.SecureDBKeys"), "backups"
     ),  # 备份目录
-    "key_rotation_days": 90,  # 密钥轮换周期（天）
+    "key_rotation_days": 90,  # 密钥轮换周期 (天) 
     "pbkdf2_iterations": 1000000,  # PBKDF2迭代次数
 }
 

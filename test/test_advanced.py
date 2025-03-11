@@ -18,7 +18,7 @@ try:
 except ImportError as e:
     logger = logging.getLogger("高级功能测试")
     logger.error(f"导入项目模块失败: {e}")
-    logger.error("请确保项目结构正确，并且已安装所有依赖")
+    logger.error("请确保项目结构正确, 并且已安装所有依赖")
     sys.exit(1)
 
 logger = logging.getLogger("高级功能测试")
@@ -49,10 +49,10 @@ def test_batch_operations():
         record_ids = secure_db.add_records_batch(batch_records)
 
         if len(record_ids) == batch_size:
-            logger.info(f"批量添加成功，添加了 {len(record_ids)} 条记录")
+            logger.info(f"批量添加成功, 添加了 {len(record_ids)} 条记录")
         else:
             logger.error(
-                f"批量添加失败，预期 {batch_size} 条，实际添加 {len(record_ids)} 条"
+                f"批量添加失败, 预期 {batch_size} 条, 实际添加 {len(record_ids)} 条"
             )
             success = False
 
@@ -61,10 +61,10 @@ def test_batch_operations():
         batch_results = secure_db.get_records_batch(record_ids)
 
         if len(batch_results) == len(record_ids) and all(batch_results.values()):
-            logger.info("批量获取成功，所有记录都获取到了")
+            logger.info("批量获取成功, 所有记录都获取到了")
         else:
             logger.error(
-                f"批量获取失败，预期 {len(record_ids)} 条，实际获取 {len([v for v in batch_results.values() if v])} 条"
+                f"批量获取失败, 预期 {len(record_ids)} 条, 实际获取 {len([v for v in batch_results.values() if v])} 条"
             )
             success = False
 
@@ -79,10 +79,10 @@ def test_batch_operations():
         updated_count = secure_db.update_records_batch(updated_batch)
 
         if updated_count == len(updated_batch):
-            logger.info(f"批量更新成功，更新了 {updated_count} 条记录")
+            logger.info(f"批量更新成功, 更新了 {updated_count} 条记录")
         else:
             logger.error(
-                f"批量更新失败，预期更新 {len(updated_batch)} 条，实际更新 {updated_count} 条"
+                f"批量更新失败, 预期更新 {len(updated_batch)} 条, 实际更新 {updated_count} 条"
             )
             success = False
 
@@ -91,10 +91,10 @@ def test_batch_operations():
         deleted_count = secure_db.delete_records_batch(record_ids)
 
         if deleted_count == len(record_ids):
-            logger.info(f"批量删除成功，删除了 {deleted_count} 条记录")
+            logger.info(f"批量删除成功, 删除了 {deleted_count} 条记录")
         else:
             logger.error(
-                f"批量删除失败，预期删除 {len(record_ids)} 条，实际删除 {deleted_count} 条"
+                f"批量删除失败, 预期删除 {len(record_ids)} 条, 实际删除 {deleted_count} 条"
             )
             success = False
 
@@ -114,13 +114,13 @@ def test_range_query():
         # 初始化安全数据库系统
         secure_db = SecureDB(load_keys=True)
 
-        # 生成连续的客户ID，以便测试范围查询
+        # 生成连续的客户ID, 以便测试范围查询
         base_customer_id = random.randint(*TEST_DATA_CONFIG["index_range"])
         customer_ids = [base_customer_id + i for i in range(10)]
         record_ids = []
 
         # 添加测试记录
-        logger.info(f"添加10条连续客户ID的测试记录，起始ID: {base_customer_id}")
+        logger.info(f"添加10条连续客户ID的测试记录, 起始ID: {base_customer_id}")
         for customer_id in customer_ids:
             data = generate_privacy_test_data(customer_id)
             record_id = secure_db.add_record(customer_id, data, enable_range_query=True)
@@ -133,9 +133,9 @@ def test_range_query():
         range_results = secure_db.search_by_range(start_id, end_id)
 
         if len(range_results) == 10:
-            logger.info(f"范围查询成功，找到 {len(range_results)} 条记录")
+            logger.info(f"范围查询成功, 找到 {len(range_results)} 条记录")
         else:
-            logger.error(f"范围查询失败，预期 10 条，实际找到 {len(range_results)} 条")
+            logger.error(f"范围查询失败, 预期 10 条, 实际找到 {len(range_results)} 条")
             success = False
 
         # 测试范围查询 - 部分包含
@@ -145,9 +145,9 @@ def test_range_query():
         range_results = secure_db.search_by_range(start_id, end_id)
 
         if len(range_results) == 5:  # 包含5条记录
-            logger.info(f"范围查询成功，找到 {len(range_results)} 条记录")
+            logger.info(f"范围查询成功, 找到 {len(range_results)} 条记录")
         else:
-            logger.error(f"范围查询失败，预期 5 条，实际找到 {len(range_results)} 条")
+            logger.error(f"范围查询失败, 预期 5 条, 实际找到 {len(range_results)} 条")
             success = False
 
         # 测试范围查询 - 不包含
@@ -157,9 +157,9 @@ def test_range_query():
         range_results = secure_db.search_by_range(start_id, end_id)
 
         if len(range_results) == 0:
-            logger.info("范围查询成功，未找到记录（符合预期）")
+            logger.info("范围查询成功, 未找到记录 (符合预期) ")
         else:
-            logger.error(f"范围查询失败，预期 0 条，实际找到 {len(range_results)} 条")
+            logger.error(f"范围查询失败, 预期 0 条, 实际找到 {len(range_results)} 条")
             success = False
 
         # 清理测试记录
@@ -189,13 +189,13 @@ def test_cache_performance():
         record_id = secure_db.add_record(customer_id, data, enable_range_query=True)
 
         # 测试缓存性能 - 首次访问
-        logger.info("测试首次访问记录（无缓存）...")
+        logger.info("测试首次访问记录 (无缓存) ...")
         start_time = time.time()
         _ = secure_db.get_record(record_id)
         first_access_time = time.time() - start_time
 
         # 测试缓存性能 - 再次访问
-        logger.info("测试再次访问记录（有缓存）...")
+        logger.info("测试再次访问记录 (有缓存) ...")
         start_time = time.time()
         _ = secure_db.get_record(record_id)
         second_access_time = time.time() - start_time
@@ -204,10 +204,10 @@ def test_cache_performance():
         logger.info(f"再次访问时间: {second_access_time:.6f}秒")
 
         if second_access_time < first_access_time:
-            logger.info("缓存性能测试通过，缓存访问更快")
+            logger.info("缓存性能测试通过, 缓存访问更快")
         else:
-            logger.warning("缓存性能测试异常，缓存访问未加速")
-            # 不将此视为失败，因为在某些环境下可能有波动
+            logger.warning("缓存性能测试异常, 缓存访问未加速")
+            # 不将此视为失败, 因为在某些环境下可能有波动
 
         # 清理测试记录
         secure_db.delete_record(record_id)

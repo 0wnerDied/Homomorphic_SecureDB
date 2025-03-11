@@ -11,15 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 class AESManager:
-    """AES加密管理器，处理AES-GCM加密操作"""
+    """AES加密管理器, 处理AES-GCM加密操作"""
 
     def __init__(self, key: Optional[bytes] = None, key_size: int = 32):
         """
         初始化AES加密管理器
 
         Args:
-            key: 可选的AES密钥，如果未提供则生成新密钥
-            key_size: 密钥大小（字节），默认为32（256位）
+            key: 可选的AES密钥, 如果未提供则生成新密钥
+            key_size: 密钥大小 (字节) , 默认为32 (256位) 
         """
         self.key = key if key is not None else get_random_bytes(key_size)
         logger.info(f"AES manager initialized with {'provided' if key else 'new'} key")
@@ -29,10 +29,10 @@ class AESManager:
         加密数据
 
         Args:
-            data: 要加密的数据，可以是字符串或字节
+            data: 要加密的数据, 可以是字符串或字节
 
         Returns:
-            加密后的字节数据（包含IV和认证标签）
+            加密后的字节数据 (包含IV和认证标签) 
         """
         try:
             # 将字符串转换为字节
@@ -51,7 +51,7 @@ class AESManager:
             ciphertext, tag = cipher.encrypt_and_digest(data_bytes)
 
             # 组合IV、认证标签和密文
-            # 格式：IV (12字节) + 标签 (16字节) + 密文
+            # 格式: IV (12字节) + 标签 (16字节) + 密文
             return iv + tag + ciphertext
         except Exception as e:
             logger.error(f"Error encrypting data: {e}")
@@ -62,7 +62,7 @@ class AESManager:
         解密数据
 
         Args:
-            encrypted_data: 加密后的字节数据（包含IV和认证标签）
+            encrypted_data: 加密后的字节数据 (包含IV和认证标签) 
 
         Returns:
             解密后的字节数据

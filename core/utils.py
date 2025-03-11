@@ -27,7 +27,7 @@ V = TypeVar("V")  # 值类型
 
 def timing_decorator(func: Callable) -> Callable:
     """
-    计时装饰器，用于测量函数执行时间
+    计时装饰器, 用于测量函数执行时间
 
     Args:
         func: 要计时的函数
@@ -54,12 +54,12 @@ def retry_decorator(
     exceptions: tuple = (Exception,),
 ) -> Callable:
     """
-    重试装饰器，用于自动重试可能失败的操作
+    重试装饰器, 用于自动重试可能失败的操作
 
     Args:
         max_retries: 最大重试次数
-        delay: 初始延迟时间（秒）
-        backoff_factor: 退避因子，每次重试后延迟时间会乘以这个因子
+        delay: 初始延迟时间 (秒) 
+        backoff_factor: 退避因子, 每次重试后延迟时间会乘以这个因子
         exceptions: 要捕获的异常类型
 
     Returns:
@@ -120,7 +120,7 @@ class LRUCache(Generic[K, V]):
             key: 缓存键
 
         Returns:
-            缓存值，如果不存在则返回None
+            缓存值, 如果不存在则返回None
         """
         with self._lock:
             if key in self.cache:
@@ -160,7 +160,7 @@ class LRUCache(Generic[K, V]):
             key: 要移除的键
 
         Returns:
-            如果键存在并被移除返回 True，否则返回 False
+            如果键存在并被移除返回 True, 否则返回 False
         """
         with self._lock:
             if key in self.cache:
@@ -211,7 +211,7 @@ class DataCompressor:
         初始化压缩器
 
         Args:
-            level: 压缩级别，1-22，默认9
+            level: 压缩级别, 1-22, 默认9
         """
         self.compressor = zstd.ZstdCompressor(level=level)
         self.decompressor = zstd.ZstdDecompressor()
@@ -328,7 +328,7 @@ def hash_file(filepath: str, chunk_size: int = 8192) -> str:
 
 def ensure_directory(directory: str) -> None:
     """
-    确保目录存在，如果不存在则创建
+    确保目录存在, 如果不存在则创建
 
     Args:
         directory: 目录路径
@@ -339,14 +339,14 @@ def ensure_directory(directory: str) -> None:
 
 
 class SafeFileHandler:
-    """安全文件处理类，提供原子写入和备份功能"""
+    """安全文件处理类, 提供原子写入和备份功能"""
 
     @staticmethod
     def atomic_write(
         filepath: str, data: Union[str, bytes], mode: str = "w", backup: bool = True
     ) -> None:
         """
-        原子方式写入文件（先写入临时文件，再重命名）
+        原子方式写入文件 (先写入临时文件, 再重命名) 
 
         Args:
             filepath: 目标文件路径
@@ -423,7 +423,7 @@ class SafeFileHandler:
 
 
 class ProgressTracker:
-    """进度跟踪器，用于长时间运行的操作"""
+    """进度跟踪器, 用于长时间运行的操作"""
 
     def __init__(
         self, total: int, description: str = "Processing", update_interval: float = 0.5
@@ -434,7 +434,7 @@ class ProgressTracker:
         Args:
             total: 总项数
             description: 操作描述
-            update_interval: 更新间隔（秒）
+            update_interval: 更新间隔 (秒) 
         """
         self.total = total
         self.description = description
@@ -501,7 +501,7 @@ class ProgressTracker:
         return total_time, items_per_sec
 
 
-# 设置系统异常钩子，确保未捕获的异常被记录
+# 设置系统异常钩子, 确保未捕获的异常被记录
 def exception_handler(exc_type, exc_value, exc_traceback):
     """处理未捕获的异常"""
     if issubclass(exc_type, KeyboardInterrupt):

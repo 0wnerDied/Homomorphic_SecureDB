@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class FHEManager:
-    """同态加密管理器，处理BFV加密操作"""
+    """同态加密管理器, 处理BFV加密操作"""
 
     def __init__(
         self,
@@ -25,9 +25,9 @@ class FHEManager:
         初始化同态加密管理器
 
         Args:
-            config: 配置字典，包含scheme, poly_modulus_degree, plain_modulus等参数
+            config: 配置字典, 包含scheme, poly_modulus_degree, plain_modulus等参数
             key_manager: 密钥管理器实例
-            encrypt_only: 是否仅用于加密（不需要私钥）
+            encrypt_only: 是否仅用于加密 (不需要私钥) 
         """
         self.config = config
         self.key_manager = key_manager
@@ -52,7 +52,7 @@ class FHEManager:
         self._decrypt_cache = {}
         self.cache_hits = 0
 
-        # 如果密钥文件存在，加载它们；否则创建新的密钥
+        # 如果密钥文件存在, 加载它们；否则创建新的密钥
         if os.path.exists(self.context_file) and os.path.exists(self.public_key_file):
             try:
                 logger.info(f"Loading FHE keys from files")
@@ -91,7 +91,7 @@ class FHEManager:
             if not self.encrypt_only:
                 self.decryptor = seal.Decryptor(self.context, self.secret_key)
 
-            # 创建批处理编码器 (替代IntegerEncoder)
+            # 创建批处理编码器 (IntegerEncoder已弃用)
             self.encoder = seal.BatchEncoder(self.context)
 
             logger.info("FHE context initialized successfully")
@@ -146,7 +146,7 @@ class FHEManager:
             # 创建批处理编码器 (替代IntegerEncoder)
             self.encoder = seal.BatchEncoder(self.context)
 
-            # 如果不是仅加密模式，加载私钥和重线性化密钥
+            # 如果不是仅加密模式, 加载私钥和重线性化密钥
             if not self.encrypt_only:
                 self.secret_key = seal.SecretKey()
                 self.secret_key.load(self.context, self.private_key_file)
@@ -249,7 +249,7 @@ class FHEManager:
             query_value: 要比较的查询值
 
         Returns:
-            如果相等返回True，否则返回False
+            如果相等返回True, 否则返回False
         """
         if self.encrypt_only:
             raise ValueError("Cannot compare in encrypt-only mode")
@@ -320,14 +320,13 @@ class FHEManager:
         self._decrypt_cache.clear()
         self.cache_hits = 0
 
-    # 新增功能：范围查询支持
     def encrypt_for_range_query(self, value: int, bits: int = 32) -> List[bytes]:
         """
         为范围查询加密整数值
 
         Args:
             value: 要加密的整数
-            bits: 位数，默认32位
+            bits: 位数, 默认32位
 
         Returns:
             加密后的位表示列表
@@ -353,10 +352,10 @@ class FHEManager:
         Args:
             encrypted_bits: 加密的位表示列表
             query_value: 要比较的查询值
-            bits: 位数，默认32位
+            bits: 位数, 默认32位
 
         Returns:
-            如果加密值小于查询值返回True，否则返回False
+            如果加密值小于查询值返回True, 否则返回False
         """
         if self.encrypt_only:
             raise ValueError("Cannot compare in encrypt-only mode")
@@ -366,7 +365,7 @@ class FHEManager:
         query_bits = [int(b) for b in query_binary]
 
         # 实现比较逻辑
-        # 注意：这是一个简化实现，实际的FHE比较需要更复杂的电路
+        # 注意: 这是一个简化实现, 实际的FHE比较需要更复杂的电路
         for i in range(bits):
             # 从最高位开始比较
             enc_bit = self.decrypt_int(encrypted_bits[i])
@@ -377,7 +376,7 @@ class FHEManager:
             elif enc_bit > query_bit:
                 return False
 
-        # 如果所有位都相等，则值相等
+        # 如果所有位都相等, 则值相等
         return False
 
     def compare_greater_than(
@@ -389,10 +388,10 @@ class FHEManager:
         Args:
             encrypted_bits: 加密的位表示列表
             query_value: 要比较的查询值
-            bits: 位数，默认32位
+            bits: 位数, 默认32位
 
         Returns:
-            如果加密值大于查询值返回True，否则返回False
+            如果加密值大于查询值返回True, 否则返回False
         """
         if self.encrypt_only:
             raise ValueError("Cannot compare in encrypt-only mode")
@@ -412,7 +411,7 @@ class FHEManager:
             elif enc_bit < query_bit:
                 return False
 
-        # 如果所有位都相等，则值相等
+        # 如果所有位都相等, 则值相等
         return False
 
     def compare_range(
@@ -427,17 +426,17 @@ class FHEManager:
 
         Args:
             encrypted_bits: 加密的位表示列表
-            min_value: 范围最小值，如果为None则不检查下限
-            max_value: 范围最大值，如果为None则不检查上限
-            bits: 位数，默认32位
+            min_value: 范围最小值, 如果为None则不检查下限
+            max_value: 范围最大值, 如果为None则不检查上限
+            bits: 位数, 默认32位
 
         Returns:
-            如果加密值在范围内返回True，否则返回False
+            如果加密值在范围内返回True, 否则返回False
         """
         if self.encrypt_only:
             raise ValueError("Cannot compare in encrypt-only mode")
 
-        # 解密值进行比较（在实际应用中，应该使用同态操作而不是解密）
+        # 解密值进行比较 (在实际应用中, 应该使用同态操作而不是解密) 
         value = 0
         for i in range(bits):
             bit = self.decrypt_int(encrypted_bits[i])

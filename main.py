@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument(
         "--encrypt-only",
         action="store_true",
-        help="仅加密模式（只需要公钥）",
+        help="仅加密模式 (只需要公钥) ",
     )
     parser.add_argument("--add", action="store_true", help="添加新记录")
     parser.add_argument("--get", type=int, help="通过ID获取记录")
@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument(
         "--ids",
         type=str,
-        help="批量操作的记录ID列表，以逗号分隔",
+        help="批量操作的记录ID列表, 以逗号分隔",
     )
     parser.add_argument("--export", type=str, help="导出数据到JSON文件")
     parser.add_argument(
@@ -52,7 +52,7 @@ def parse_args():
 
     # 缓存相关参数
     parser.add_argument(
-        "--cache-size", type=int, help="设置自定义缓存大小（覆盖配置文件）"
+        "--cache-size", type=int, help="设置自定义缓存大小 (覆盖配置文件) "
     )
     parser.add_argument("--clear-cache", action="store_true", help="清除所有缓存")
     parser.add_argument("--cache-stats", action="store_true", help="显示缓存统计信息")
@@ -97,7 +97,7 @@ def main():
                 return
 
             record_id = secure_db.add_record(args.index, args.data, args.range)
-            print(f"已添加记录，ID: {record_id}")
+            print(f"已添加记录, ID: {record_id}")
 
         elif args.get is not None:
             # 获取记录

@@ -22,10 +22,10 @@ TEST_DB_CONFIG = {
     "admin_password": "",
 }
 
-# 管理员数据库连接字符串（连接到postgres数据库）
+# 管理员数据库连接字符串 (连接到postgres数据库) 
 ADMIN_DB_CONNECTION_STRING = f"postgresql://{TEST_DB_CONFIG['admin_user']}:{TEST_DB_CONFIG['admin_password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/postgres"
 
-# 测试数据库连接字符串（连接到测试数据库）
+# 测试数据库连接字符串 (连接到测试数据库) 
 TEST_DB_CONNECTION_STRING = f"postgresql://{TEST_DB_CONFIG['user']}:{TEST_DB_CONFIG['password']}@{TEST_DB_CONFIG['host']}:{TEST_DB_CONFIG['port']}/{TEST_DB_CONFIG['database']}"
 
 # 测试数据配置
@@ -33,7 +33,7 @@ TEST_DATA_CONFIG = {
     "record_count": 100,  # 要生成的记录数量
     "batch_size": 10,  # 批量操作的大小
     "export_file": os.path.join(PROJECT_ROOT, "test", "test_export.json"),
-    "index_range": (100000, 999999),  # 索引值范围（客户ID范围）
+    "index_range": (100000, 999999),  # 索引值范围 (客户ID范围) 
     "cache_size": 50,  # 测试用缓存大小
 }
 

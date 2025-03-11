@@ -22,7 +22,7 @@ logger = logging.getLogger("测试数据库初始化")
 
 
 def init_test_database():
-    """初始化测试数据库，创建必要的表和索引"""
+    """初始化测试数据库, 创建必要的表和索引"""
     try:
         logger.info("开始初始化测试数据库...")
 

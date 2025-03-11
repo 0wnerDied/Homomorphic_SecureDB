@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """数据库管理器，处理数据库操作"""
+    """数据库管理器, 处理数据库操作"""
 
     def __init__(self, connection_string: str, cache_size: int = 1000):
         """
@@ -98,8 +98,8 @@ class DatabaseManager:
 
         Args:
             encrypted_index: 加密的索引
-            encrypted_data: 加密的数据（包含IV）
-            range_query_bits: 用于范围查询的加密位表示（可选）
+            encrypted_data: 加密的数据 (包含IV) 
+            range_query_bits: 用于范围查询的加密位表示 (可选) 
 
         Returns:
             新记录的ID
@@ -116,7 +116,7 @@ class DatabaseManager:
             session.add(record)
             session.flush()  # 获取ID但不提交
 
-            # 如果提供了范围查询位，添加范围查询索引
+            # 如果提供了范围查询位, 添加范围查询索引
             if range_query_bits:
                 for bit_position, encrypted_bit in enumerate(range_query_bits):
                     range_index = RangeQueryIndex(
@@ -148,7 +148,7 @@ class DatabaseManager:
         批量添加加密记录到数据库
 
         Args:
-            records: 记录列表，每个元素为(encrypted_index, encrypted_data, range_query_bits)元组
+            records: 记录列表, 每个元素为(encrypted_index, encrypted_data, range_query_bits)元组
                     range_query_bits可以为None
 
         Returns:
@@ -170,7 +170,7 @@ class DatabaseManager:
                 session.add(record)
                 session.flush()  # 获取ID但不提交
 
-                # 如果提供了范围查询位，添加范围查询索引
+                # 如果提供了范围查询位, 添加范围查询索引
                 if range_query_bits:
                     for bit_position, encrypted_bit in enumerate(range_query_bits):
                         range_index = RangeQueryIndex(
@@ -230,7 +230,7 @@ class DatabaseManager:
             record_id: 记录ID
 
         Returns:
-            加密记录对象，如果不存在则返回None
+            加密记录对象, 如果不存在则返回None
         """
         # 首先检查缓存
         cached_record = self.record_cache.get(record_id)
@@ -238,7 +238,7 @@ class DatabaseManager:
             logger.info(f"Cache hit: Retrieved record with ID {record_id} from cache")
             return cached_record
 
-        # 缓存未命中，从数据库获取
+        # 缓存未命中, 从数据库获取
         session = self.Session()
         try:
             record = (
@@ -285,12 +285,12 @@ class DatabaseManager:
             else:
                 missing_ids.append(record_id)
 
-        # 如果所有记录都在缓存中，直接返回
+        # 如果所有记录都在缓存中, 直接返回
         if not missing_ids:
             logger.info(f"Cache hit: Retrieved all {len(records)} records from cache")
             return records
 
-        # 否则，从数据库获取缺失的记录
+        # 否则, 从数据库获取缺失的记录
         session = self.Session()
         try:
             db_records = (
@@ -322,7 +322,7 @@ class DatabaseManager:
         使用同态加密查询匹配的记录
 
         Args:
-            fhe_manager: FHEManager实例，用于比较加密索引
+            fhe_manager: FHEManager实例, 用于比较加密索引
             query_value: 要查询的索引值
 
         Returns:
@@ -369,7 +369,7 @@ class DatabaseManager:
         使用同态加密查询匹配多个索引值的记录
 
         Args:
-            fhe_manager: FHEManager实例，用于比较加密索引
+            fhe_manager: FHEManager实例, 用于比较加密索引
             query_values: 要查询的索引值列表
 
         Returns:
@@ -386,7 +386,7 @@ class DatabaseManager:
             else:
                 uncached_values.append(query_value)
 
-        # 如果所有查询值都有缓存结果，直接返回
+        # 如果所有查询值都有缓存结果, 直接返回
         if not uncached_values:
             logger.info(f"Cache hit: Using cached results for all index queries")
             return self.get_records_by_ids(list(all_matching_ids))
@@ -415,7 +415,7 @@ class DatabaseManager:
 
                         # 更新查询值到ID的映射
                         value_to_ids[query_value].append(record.id)
-                        break  # 一旦找到匹配，就不再检查其他查询值
+                        break  # 一旦找到匹配, 就不再检查其他查询值
 
             # 更新查询结果缓存
             for query_value, ids in value_to_ids.items():
@@ -437,9 +437,9 @@ class DatabaseManager:
         使用范围查询索引查询记录
 
         Args:
-            fhe_manager: FHEManager实例，用于比较加密索引
-            min_value: 范围最小值，如果为None则不检查下限
-            max_value: 范围最大值，如果为None则不检查上限
+            fhe_manager: FHEManager实例, 用于比较加密索引
+            min_value: 范围最小值, 如果为None则不检查下限
+            max_value: 范围最大值, 如果为None则不检查上限
 
         Returns:
             匹配的记录列表
@@ -631,7 +631,7 @@ class DatabaseManager:
         批量更新加密记录
 
         Args:
-            updates: 更新列表，每个元素为(record_id, encrypted_data)元组
+            updates: 更新列表, 每个元素为(record_id, encrypted_data)元组
 
         Returns:
             成功更新的记录数量
@@ -682,7 +682,7 @@ class DatabaseManager:
         logger.info("All caches cleared")
 
     def _invalidate_query_caches(self):
-        """当记录被修改或删除时，使查询缓存失效"""
+        """当记录被修改或删除时, 使查询缓存失效"""
         self.index_query_cache.clear()
         self.range_query_cache.clear()
         logger.info("Query caches invalidated")
