@@ -1,5 +1,6 @@
 __pycache__
+*.json
 *.log
 *.txt
-test_config_override.py
 keys
+test_config_override.py
