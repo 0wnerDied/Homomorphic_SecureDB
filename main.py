@@ -49,6 +49,16 @@ def parse_args():
         action="store_true",
         help="在导出中包含加密数据",
     )
+    parser.add_argument(
+        "--export-records",
+        action="store_true",
+        help="导出特定记录 (需要 --ids 和 --export 参数)",
+    )
+    parser.add_argument(
+        "--import-records",
+        action="store_true",
+        help="导入特定记录 (使用 --import 指定文件)",
+    )
 
     # 缓存相关参数
     parser.add_argument(
@@ -178,8 +188,27 @@ def main():
             count = secure_db.cleanup_references()
             print(f"已清理 {count} 个未使用的引用")
 
+        elif args.export_records:
+            # 导出特定记录
+            if not args.ids or not args.export:
+                print("错误: 导出特定记录需要 --ids 和 --export 参数")
+                return
+
+            record_ids = [int(id_str) for id_str in args.ids.split(",")]
+            count = secure_db.export_records(record_ids, args.export)
+            print(f"已导出 {count} 条特定记录到 {args.export}")
+
+        elif args.import_records:
+            # 导入特定记录
+            if not args.import_file:
+                print("错误: 导入特定记录需要 --import 参数")
+                return
+
+            record_ids = secure_db.import_records(args.import_file)
+            print(f"已从 {args.import_file} 导入 {len(record_ids)} 条特定记录")
+
         elif args.export:
-            # 导出数据
+            # 导出所有数据
             count = secure_db.export_data(args.export, args.include_encrypted)
             print(f"已导出 {count} 条记录到 {args.export}")
 

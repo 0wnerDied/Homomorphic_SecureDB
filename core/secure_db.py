@@ -587,3 +587,111 @@ class SecureDB:
         except Exception as e:
             logger.error(f"导入数据失败: {e}")
             raise
+
+    def export_records(self, record_ids: List[int], output_file: str) -> int:
+        """
+        导出指定记录到JSON文件
+
+        Args:
+            record_ids: 要导出的记录ID列表
+            output_file: 输出文件路径
+
+        Returns:
+            导出的记录数量
+        """
+        try:
+            start_time = time.time()
+
+            # 获取指定记录
+            records = self.db_manager.get_records_by_ids(record_ids)
+
+            # 准备导出数据
+            export_data = []
+
+            for record in records:
+                record_data = {
+                    "id": record.id,
+                    "created_at": record.created_at.isoformat(),
+                    "updated_at": (
+                        record.updated_at.isoformat()
+                        if hasattr(record, "updated_at")
+                        else None
+                    ),
+                }
+
+                # 解密数据
+                try:
+                    decrypted_data = self.aes_manager.decrypt(record.encrypted_data)
+                    record_data["data"] = decrypted_data.decode("utf-8")
+                except Exception as e:
+                    logger.error(f"解密记录数据失败, ID: {record.id}: {e}")
+                    record_data["data"] = None
+
+                export_data.append(record_data)
+
+            # 写入文件
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"导出记录成功, 记录数: {len(export_data)}, 文件: {output_file}, 耗时: {elapsed:.3f}秒"
+            )
+
+            return len(export_data)
+        except Exception as e:
+            logger.error(f"导出记录失败: {e}")
+            raise
+
+    def import_records(self, input_file: str) -> List[int]:
+        """
+        从JSON文件导入记录
+
+        Args:
+            input_file: 输入文件路径
+
+        Returns:
+            导入的记录ID列表
+        """
+        try:
+            start_time = time.time()
+
+            # 读取文件
+            with open(input_file, "r", encoding="utf-8") as f:
+                import_data = json.load(f)
+
+            # 准备批量导入
+            records = []
+
+            for item in import_data:
+                if "data" in item and isinstance(item["data"], str):
+                    try:
+                        # 尝试解析JSON数据
+                        data_obj = json.loads(item["data"])
+
+                        # 如果数据对象包含索引字段
+                        if "index" in data_obj:
+                            index_value = int(data_obj["index"])
+                            records.append(
+                                (index_value, item["data"], True)
+                            )  # 启用范围查询
+                    except (json.JSONDecodeError, ValueError, KeyError):
+                        # 如果解析失败, 跳过该记录
+                        logger.warning(f"跳过格式无效的记录")
+
+            # 批量添加记录
+            if records:
+                record_ids = self.add_records_batch(records)
+
+                elapsed = time.time() - start_time
+                logger.info(
+                    f"导入记录成功, 记录数: {len(record_ids)}, 文件: {input_file}, 耗时: {elapsed:.3f}秒"
+                )
+
+                return record_ids
+            else:
+                logger.warning("没有找到有效的记录可导入")
+                return []
+        except Exception as e:
+            logger.error(f"导入记录失败: {e}")
+            raise

@@ -18,7 +18,7 @@ TEST_DB_CONFIG = {
     "user": "privacy_db_test",
     "password": "privacy_test_pwd",
     "database": "aviation_privacy_test",
-    "admin_user": "0wnerd1ed",  # 使用标准的PostgreSQL管理员用户
+    "admin_user": "0wnerd1ed",
     "admin_password": "",
 }
 
@@ -33,6 +33,10 @@ TEST_DATA_CONFIG = {
     "record_count": 100,  # 要生成的记录数量
     "batch_size": 10,  # 批量操作的大小
     "export_file": os.path.join(PROJECT_ROOT, "test", "test_export.json"),
+    "export_file_specific": os.path.join(
+        PROJECT_ROOT, "test", "test_export_specific.json"
+    ),
+    "export_file_all": os.path.join(PROJECT_ROOT, "test", "test_export_all.json"),
     "index_range": (100000, 999999),  # 索引值范围 (客户ID范围)
     "cache_size": 50,  # 测试用缓存大小
 }

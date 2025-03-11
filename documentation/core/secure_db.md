@@ -234,7 +234,7 @@ def cleanup_references(self) -> int
 
 #### 导入/导出功能
 
-##### 导出数据
+##### 导出所有数据
 
 ```python
 def export_data(self, output_file: str, include_encrypted: bool = False) -> int
@@ -252,7 +252,27 @@ def export_data(self, output_file: str, include_encrypted: bool = False) -> int
 - 将数据导出到JSON文件
 - 可选择是否包含加密形式的数据
 
-##### 导入数据
+##### 导出特定记录
+
+```python
+def export_records(self, record_ids: List[int], output_file: str, include_encrypted: bool = False) -> int
+```
+
+**参数:**
+- `record_ids`: 整数列表，要导出的记录ID列表
+- `output_file`: 字符串，输出文件路径
+- `include_encrypted`: 布尔值，是否包含加密数据
+
+**返回:**
+- 整数，成功导出的记录数量
+
+**功能:**
+- 获取指定ID的记录并解密数据
+- 将数据导出到JSON文件
+- 可选择是否包含加密形式的数据
+- 适用于需要导出特定记录子集的场景
+
+##### 导入所有数据
 
 ```python
 def import_data(self, input_file: str, enable_range_query: bool = False) -> int
@@ -270,7 +290,45 @@ def import_data(self, input_file: str, enable_range_query: bool = False) -> int
 - 如果数据包含加密索引和数据，直接使用
 - 否则，从明文数据创建新记录
 
+##### 导入特定记录
+
+```python
+def import_records(self, input_file: str, enable_range_query: bool = False) -> List[int]
+```
+
+**参数:**
+- `input_file`: 字符串，输入文件路径
+- `enable_range_query`: 布尔值，是否为导入的记录启用范围查询
+
+**返回:**
+- 整数列表，导入记录的ID列表
+
+**功能:**
+- 从JSON文件读取特定记录数据
+- 将记录导入到数据库系统
+- 返回新创建记录的ID列表，便于后续跟踪和操作
+- 适用于需要选择性导入特定记录的场景
+
+#### 索引值获取
+
+```python
+def get_index_value(self, record_id: int) -> Optional[int]
+```
+
+**参数:**
+- `record_id`: 整数，记录ID
+
+**返回:**
+- 整数，记录的索引值；如果记录不存在则返回None
+
+**功能:**
+- 获取并解密指定记录的索引值
+- 用于在不需要完整记录数据的情况下获取索引信息
+- 在验证导入/导出功能时特别有用
+
 ## 使用示例
+
+### 基本操作
 
 ```python
 # 初始化安全数据库系统（创建新密钥）
@@ -293,12 +351,47 @@ exported_count = secure_db.export_data("backup.json")
 print(f"导出了 {exported_count} 条记录")
 ```
 
+### 导出和导入特定记录
+
+```python
+# 初始化安全数据库系统（加载现有密钥）
+secure_db = SecureDB(load_keys=True)
+
+# 添加一些测试记录
+record_ids = []
+for i in range(10):
+    record_id = secure_db.add_record(
+        index_value=1000+i, 
+        data=f'{{"customer_id":{1000+i},"name":"客户{i}","value":{i*100}}}', 
+        enable_range_query=True
+    )
+    record_ids.append(record_id)
+
+# 导出特定记录
+export_file = "specific_records.json"
+exported_count = secure_db.export_records(record_ids[:5], export_file)
+print(f"导出了 {exported_count} 条特定记录到 {export_file}")
+
+# 删除原始记录
+secure_db.delete_records_batch(record_ids)
+
+# 导入特定记录
+imported_ids = secure_db.import_records(export_file)
+print(f"导入了 {len(imported_ids)} 条记录，ID: {imported_ids}")
+
+# 验证导入的记录
+for record_id in imported_ids:
+    data = secure_db.get_record(record_id)
+    print(f"记录 {record_id}: {data}")
+```
+
 ## 性能考虑
 
 - 同态加密操作计算密集，可能会影响性能
 - 批处理方法（`add_records_batch`、`get_records_batch`等）可以显著提高效率
 - 缓存机制有助于减少重复计算和数据库访问
 - 范围查询比精确索引查询更消耗资源
+- 导出和导入大量记录时，建议使用批处理方式进行处理，避免内存占用过高
 
 ## 安全注意事项
 
@@ -306,3 +399,16 @@ print(f"导出了 {exported_count} 条记录")
 - 密钥文件应妥善保管，避免未授权访问
 - 加密参数（如多项式模数度、明文模数等）直接影响安全性和性能
 - 在生产环境中应定期轮换密钥
+- 导出的数据文件可能包含敏感信息，应妥善保护
+- 导入数据时应验证数据来源的可靠性，避免导入恶意数据
+
+## 数据备份与恢复
+
+系统提供了完整的数据备份与恢复机制：
+
+1. **全量备份**：使用 `export_data()` 方法导出所有记录
+2. **选择性备份**：使用 `export_records()` 方法导出特定记录
+3. **数据恢复**：使用 `import_data()` 或 `import_records()` 方法导入备份数据
+4. **增量备份策略**：可以结合索引值和时间戳实现增量备份
+
+建议定期执行备份操作，并将备份文件存储在安全的位置。在进行重大操作前，也应当创建备份以便在出现问题时能够恢复数据。
