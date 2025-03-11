@@ -58,7 +58,7 @@ def retry_decorator(
 
     Args:
         max_retries: 最大重试次数
-        delay: 初始延迟时间 (秒) 
+        delay: 初始延迟时间 (秒)
         backoff_factor: 退避因子, 每次重试后延迟时间会乘以这个因子
         exceptions: 要捕获的异常类型
 
@@ -346,7 +346,7 @@ class SafeFileHandler:
         filepath: str, data: Union[str, bytes], mode: str = "w", backup: bool = True
     ) -> None:
         """
-        原子方式写入文件 (先写入临时文件, 再重命名) 
+        原子方式写入文件 (先写入临时文件, 再重命名)
 
         Args:
             filepath: 目标文件路径
@@ -434,7 +434,7 @@ class ProgressTracker:
         Args:
             total: 总项数
             description: 操作描述
-            update_interval: 更新间隔 (秒) 
+            update_interval: 更新间隔 (秒)
         """
         self.total = total
         self.description = description

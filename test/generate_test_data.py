@@ -233,7 +233,7 @@ def generate_random_id_card():
     # 顺序码
     sequence = f"{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}"
 
-    # 校验码 (简化处理, 实际应该根据前17位计算) 
+    # 校验码 (简化处理, 实际应该根据前17位计算)
     check_code = random.choice("0123456789X")
 
     return (
@@ -248,7 +248,7 @@ def generate_random_passport():
 
 
 def generate_random_credit_card():
-    """生成随机信用卡号 (模拟) """
+    """生成随机信用卡号 (模拟)"""
     # 常见信用卡前缀
     prefixes = ["4", "5", "6"]  # Visa, MasterCard, 银联等
 

@@ -19,7 +19,7 @@ class AESManager:
 
         Args:
             key: 可选的AES密钥, 如果未提供则生成新密钥
-            key_size: 密钥大小 (字节) , 默认为32 (256位) 
+            key_size: 密钥大小 (字节) , 默认为32 (256位)
         """
         self.key = key if key is not None else get_random_bytes(key_size)
         logger.info(f"AES manager initialized with {'provided' if key else 'new'} key")
@@ -32,7 +32,7 @@ class AESManager:
             data: 要加密的数据, 可以是字符串或字节
 
         Returns:
-            加密后的字节数据 (包含IV和认证标签) 
+            加密后的字节数据 (包含IV和认证标签)
         """
         try:
             # 将字符串转换为字节
@@ -62,7 +62,7 @@ class AESManager:
         解密数据
 
         Args:
-            encrypted_data: 加密后的字节数据 (包含IV和认证标签) 
+            encrypted_data: 加密后的字节数据 (包含IV和认证标签)
 
         Returns:
             解密后的字节数据

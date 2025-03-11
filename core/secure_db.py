@@ -46,7 +46,7 @@ class SecureDB:
 
         Args:
             load_keys: 是否从文件加载密钥
-            encrypt_only: 是否仅用于加密 (不需要私钥) 
+            encrypt_only: 是否仅用于加密 (不需要私钥)
             cache_size: 缓存大小, 如果为None则使用配置文件中的值
         """
         # 确保密钥目录存在

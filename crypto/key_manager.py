@@ -132,7 +132,7 @@ class KeyManager:
         使用密码解密AES密钥
 
         Args:
-            encrypted_data: 加密的数据 (IV + 加密密钥) 
+            encrypted_data: 加密的数据 (IV + 加密密钥)
             salt: 用于密码派生的盐
             password: 用于解密的密码
 
@@ -173,7 +173,7 @@ class KeyManager:
             # 加密AES密钥
             encrypted_key, salt = self.encrypt_aes_key(aes_key, password)
 
-            # 准备保存的数据 (salt + encrypted_key) 
+            # 准备保存的数据 (salt + encrypted_key)
             data_to_save = {"salt": salt, "encrypted_key": encrypted_key}
 
             # 保存到文件
@@ -245,7 +245,7 @@ class KeyManager:
             compressed_public_key = self.compress_data(public_key)
             self.save_file(compressed_public_key, public_key_file)
 
-            # 处理私钥 (可选加密) 
+            # 处理私钥 (可选加密)
             compressed_secret_key = self.compress_data(secret_key)
 
             if password:
@@ -265,7 +265,7 @@ class KeyManager:
                 # 保存加密的私钥
                 self.save_file(encrypted_data, secret_key_file)
 
-                # 保存用于解密私钥的AES密钥 (本身也是加密的) 
+                # 保存用于解密私钥的AES密钥 (本身也是加密的)
                 aes_key_file = f"{os.path.splitext(secret_key_file)[0]}_aes.key"
                 self.save_aes_key(aes_key, aes_key_file, password)
 
@@ -357,7 +357,7 @@ class KeyManager:
         password: Optional[str] = None,
     ) -> None:
         """
-        轮换FHE密钥对 (保存新密钥并备份旧密钥) 
+        轮换FHE密钥对 (保存新密钥并备份旧密钥)
 
         Args:
             old_public_key_file: 旧公钥文件名

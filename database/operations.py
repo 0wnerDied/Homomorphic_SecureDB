@@ -98,8 +98,8 @@ class DatabaseManager:
 
         Args:
             encrypted_index: 加密的索引
-            encrypted_data: 加密的数据 (包含IV) 
-            range_query_bits: 用于范围查询的加密位表示 (可选) 
+            encrypted_data: 加密的数据 (包含IV)
+            range_query_bits: 用于范围查询的加密位表示 (可选)
 
         Returns:
             新记录的ID
