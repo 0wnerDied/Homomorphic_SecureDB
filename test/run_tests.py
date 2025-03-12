@@ -62,6 +62,7 @@ def run_all_tests():
         ("test_basic.py", "基本功能测试"),
         ("test_advanced.py", "高级功能测试"),
         ("test_performance.py", "性能测试"),
+        ("test_import_export.py", "导入/导出测试"),
         ("cleanup_test_env.py", "测试环境清理"),
     ]
 
