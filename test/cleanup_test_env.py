@@ -58,9 +58,9 @@ def cleanup_test_database():
         return False
 
 
-def cleanup_test_files():
-    """清理测试文件"""
-    logger.info("开始清理测试文件...")
+def cleanup_test_keys():
+    """清理测试密钥文件"""
+    logger.info("开始清理测试密钥文件...")
 
     # 清理测试密钥
     keys_dir = TEST_KEY_CONFIG["keys_dir"]
@@ -74,10 +74,38 @@ def cleanup_test_files():
 
             os.rmdir(keys_dir)
             logger.info(f"删除目录: {keys_dir}")
+            return True
         except Exception as e:
             logger.error(f"清理测试密钥文件失败: {e}")
+            return False
+    return True
 
-    # 清理其他测试文件
+
+def get_user_confirmation(prompt):
+    """
+    获取用户确认
+
+    Args:
+        prompt: 提示信息
+
+    Returns:
+        bool: 用户是否确认
+    """
+    while True:
+        response = input(f"{prompt} (y/n): ").strip().lower()
+        if response in ["y", "yes"]:
+            return True
+        elif response in ["n", "no"]:
+            return False
+        else:
+            print("请输入 y 或 n")
+
+
+def cleanup_test_output_files():
+    """清理测试生成的输出文件，需要用户确认"""
+    logger.info("准备清理测试生成的输出文件...")
+
+    # 需要确认清理的测试文件
     test_files = [
         os.path.join(PROJECT_ROOT, "test", "test_export.json"),
         os.path.join(PROJECT_ROOT, "test", "record_ids.json"),
@@ -89,33 +117,63 @@ def cleanup_test_files():
         os.path.join(PROJECT_ROOT, "test", "test.log"),
     ]
 
-    for file_path in test_files:
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.info(f"删除文件: {file_path}")
-            except Exception as e:
-                logger.error(f"删除文件 {file_path} 失败: {e}")
+    # 检查哪些文件存在
+    existing_files = [f for f in test_files if os.path.exists(f)]
 
-    logger.info("测试文件清理完成")
-    return True
+    if not existing_files:
+        logger.info("没有找到需要清理的测试输出文件")
+        return True
+
+    # 显示找到的文件
+    print("\n发现以下测试输出文件:")
+    for i, file_path in enumerate(existing_files, 1):
+        print(f"{i}. {os.path.basename(file_path)}")
+
+    # 询问用户是否清理
+    if not get_user_confirmation("\n是否清理这些测试输出文件?"):
+        logger.info("用户选择保留测试输出文件")
+        return True
+
+    # 清理文件
+    success = True
+    for file_path in existing_files:
+        try:
+            os.remove(file_path)
+            logger.info(f"删除文件: {file_path}")
+        except Exception as e:
+            logger.error(f"删除文件 {file_path} 失败: {e}")
+            success = False
+
+    if success:
+        logger.info("测试输出文件清理完成")
+    else:
+        logger.warning("部分测试输出文件清理失败")
+
+    return success
 
 
 def cleanup_test_environment():
     """清理完整测试环境"""
     logger.info("开始清理测试环境...")
+    print("测试环境清理工具")
+    print("=" * 50)
 
-    # 清理测试数据库和用户
+    # 无需确认，直接清理数据库和用户
     db_success = cleanup_test_database()
 
-    # 清理测试文件
-    files_success = cleanup_test_files()
+    # 无需确认，直接清理密钥文件
+    keys_success = cleanup_test_keys()
 
-    if db_success and files_success:
+    # 需要用户确认的测试输出文件清理
+    files_success = cleanup_test_output_files()
+
+    if db_success and keys_success and files_success:
         logger.info("测试环境清理完成")
+        print("\n测试环境清理完成")
         return True
     else:
         logger.error("测试环境清理部分失败")
+        print("\n测试环境清理部分失败，请查看日志获取详情")
         return False
 
 
