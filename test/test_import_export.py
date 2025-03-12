@@ -91,23 +91,36 @@ def test_import_specific_records(record_ids, test_records, export_file):
         if import_result and len(import_result) == len(record_ids):
             logger.info(f"成功导入 {len(import_result)} 条特定记录")
 
+            # 清除缓存，确保从数据库获取最新数据
+            secure_db.clear_caches()
+
             # 验证导入的数据
             logger.info("验证导入的特定记录...")
-            for i, record_id in enumerate(import_result):
-                imported_data = secure_db.get_record(record_id)
-                original_data = test_records[i]
 
-                if imported_data == original_data:
-                    logger.debug(f"特定记录 {record_id} 验证成功")
-                else:
-                    logger.error(f"特定记录 {record_id} 验证失败, 数据不匹配")
-                    success = False
+            # 验证每条记录
+            all_verified = True
+            for i, record_id in enumerate(import_result):
+                try:
+                    # 使用get_record获取记录，避免使用缓存中的对象
+                    result = secure_db.get_record(record_id)
+
+                    if result == test_records[i]:
+                        logger.debug(f"特定记录 {record_id} 验证成功")
+                    else:
+                        logger.error(f"特定记录 {record_id} 验证失败，数据不匹配")
+                        all_verified = False
+                except Exception as e:
+                    logger.error(f"验证记录 {record_id} 时出错: {e}")
+                    all_verified = False
+
+            if not all_verified:
+                success = False
 
             # 删除导入的记录
             secure_db.delete_records_batch(import_result)
         else:
             logger.error(
-                f"导入特定记录失败, 预期 {len(record_ids)} 条, 实际导入 {len(import_result) if import_result else 0} 条"
+                f"导入特定记录失败，预期 {len(record_ids)} 条，实际导入 {len(import_result) if import_result else 0} 条"
             )
             success = False
 
