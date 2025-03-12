@@ -277,7 +277,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
 
     if data_type == "个人基本信息":
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "个人基本信息",
             "name": customer_name,
             "gender": random.choice(["男", "女"]),
@@ -307,7 +308,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
 
     elif data_type == "联系方式":
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "联系方式",
             "name": customer_name,
             "mobile_phone": generate_random_phone(),
@@ -337,7 +339,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
             )
 
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "证件信息",
             "name": customer_name,
             "id_type": id_type,
@@ -355,7 +358,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
 
     elif data_type == "旅行偏好":
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "旅行偏好",
             "name": customer_name,
             "preferred_airlines": random.sample(
@@ -416,7 +420,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
             }
 
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "支付信息",
             "name": customer_name,
             "preferred_payment_method": payment_method,
@@ -436,7 +441,8 @@ def generate_privacy_test_data(customer_id: int) -> str:
         airline = random.choice(AIRLINES)
 
         data = {
-            "customer_id": customer_id,  # 用作索引
+            "index": customer_id,  # 用作索引
+            "customer_id": customer_id,
             "type": "常旅客信息",
             "name": customer_name,
             "airline_code": airline["code"],
