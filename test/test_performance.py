@@ -157,37 +157,65 @@ class PerformanceTester:
             "times": times,
         }
 
-    def test_range_search_performance(self, iterations=10, range_size=100):
-        """测试范围搜索的性能"""
+    def test_range_search_performance(self, iterations=10, range_width=100):
+        """
+        测试范围搜索的性能
+
+        Args:
+            iterations: 测试迭代次数
+            range_width: 范围宽度（上限与下限的差值）
+        """
+        if not self.customer_ids:
+            logger.error("没有测试客户ID, 无法测试范围搜索性能")
+            return None
+
         logger.info(
-            f"测试范围搜索性能 - {iterations} 次随机范围搜索, 范围大小 {range_size}"
+            f"测试范围搜索性能 - {iterations} 次范围搜索, 范围宽度 {range_width}"
         )
 
+        # 对客户ID排序，方便构建有效范围
+        sorted_ids = sorted(self.customer_ids)
+
         times = []
+        results_counts = []
+
         for _ in range(iterations):
-            # 随机选择一个范围起点
-            start_id = random.randint(*TEST_DATA_CONFIG["index_range"])
-            end_id = start_id + range_size
+            # 随机选择一个已存在的客户ID作为范围中点
+            center_id = random.choice(sorted_ids)
+
+            # 构建范围
+            min_value = max(
+                center_id - range_width // 2, TEST_DATA_CONFIG["index_range"][0]
+            )
+            max_value = min(
+                center_id + range_width // 2, TEST_DATA_CONFIG["index_range"][1]
+            )
 
             start_time = time.time()
-            results = self.secure_db.search_by_range(start_id, end_id)
+            results = self.secure_db.search_by_range(min_value, max_value)
             elapsed = time.time() - start_time
 
             times.append(elapsed)
+            results_counts.append(len(results))
+
             logger.debug(
-                f"范围搜索 {start_id}-{end_id} 找到 {len(results)} 条记录, 耗时: {elapsed:.6f} 秒"
+                f"范围搜索 {min_value}-{max_value} 找到 {len(results)} 条记录, 耗时: {elapsed:.6f} 秒"
             )
 
         avg_time = statistics.mean(times)
-        logger.info(f"范围搜索平均耗时: {avg_time:.6f} 秒/次")
+        avg_results = statistics.mean(results_counts)
+        logger.info(
+            f"范围搜索平均耗时: {avg_time:.6f} 秒/次, 平均找到 {avg_results:.1f} 条记录"
+        )
 
         return {
             "operation": "范围搜索",
             "iterations": iterations,
-            "range_size": range_size,
+            "range_width": range_width,
             "average_time": avg_time,
             "min_time": min(times),
             "max_time": max(times),
+            "average_results_count": avg_results,
             "times": times,
         }
 
@@ -278,7 +306,7 @@ class PerformanceTester:
 
         # 测试范围搜索性能
         results["range_search"] = self.test_range_search_performance(
-            iterations=10, range_size=100
+            iterations=10, range_width=100
         )
 
         # 测试更新记录性能
