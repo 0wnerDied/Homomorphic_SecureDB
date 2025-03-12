@@ -89,11 +89,6 @@ def test_export_import_specific_records():
             )
             success = False
 
-        # 清理导出文件
-        if os.path.exists(export_file):
-            os.remove(export_file)
-            logger.info(f"已删除特定记录导出文件: {export_file}")
-
         if success:
             logger.info("特定记录导入导出测试通过")
         else:
@@ -193,11 +188,6 @@ def test_export_import_all_records():
                 f"导入所有记录失败, 至少应有 {len(record_ids)} 条, 实际导入 {import_count} 条"
             )
             success = False
-
-        # 清理导出文件
-        if os.path.exists(export_file):
-            os.remove(export_file)
-            logger.info(f"已删除所有记录导出文件: {export_file}")
 
         if success:
             logger.info("所有记录导入导出测试通过")
