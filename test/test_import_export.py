@@ -6,6 +6,7 @@ import os
 import sys
 import logging
 import random
+import json
 from test_config import PROJECT_ROOT, TEST_DATA_CONFIG
 
 # 添加项目根目录到Python路径
@@ -191,33 +192,36 @@ def test_import_all_records(original_record_ids, test_records, export_file):
             # 验证导入的数据 - 由于导入所有记录时可能有其他记录, 所以我们只验证我们知道的记录
             logger.info("验证部分导入记录...")
 
-            # 搜索导入的记录
+            # 搜索导入的记录 - 从测试记录中提取客户ID
             all_found = True
-            for i, customer_id in enumerate(
-                [
-                    secure_db.get_index_value(record_id)
-                    for record_id in original_record_ids
-                ]
-            ):
-                # 通过索引值搜索记录
-                results = secure_db.search_by_index(customer_id)
-                if not results:
-                    logger.error(f"未找到客户ID为 {customer_id} 的记录")
-                    all_found = False
-                    continue
+            for i, test_record in enumerate(test_records):
+                try:
+                    # 从测试记录中解析出客户ID
+                    record_data = json.loads(test_record)
+                    customer_id = int(record_data.get("index"))
 
-                # 验证数据内容
-                found = False
-                for result in results:
-                    if result["data"] == test_records[i]:
-                        logger.debug(
-                            f"记录 {result['id']} (客户ID: {customer_id}) 验证成功"
-                        )
-                        found = True
-                        break
+                    # 通过索引值搜索记录
+                    results = secure_db.search_by_index(customer_id)
+                    if not results:
+                        logger.error(f"未找到客户ID为 {customer_id} 的记录")
+                        all_found = False
+                        continue
 
-                if not found:
-                    logger.error(f"客户ID为 {customer_id} 的记录数据不匹配")
+                    # 验证数据内容
+                    found = False
+                    for result in results:
+                        if result["data"] == test_record:
+                            logger.debug(
+                                f"记录 {result['id']} (客户ID: {customer_id}) 验证成功"
+                            )
+                            found = True
+                            break
+
+                    if not found:
+                        logger.error(f"客户ID为 {customer_id} 的记录数据不匹配")
+                        all_found = False
+                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                    logger.error(f"解析测试记录失败: {e}")
                     all_found = False
 
             if not all_found:
