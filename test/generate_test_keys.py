@@ -5,6 +5,7 @@
 import os
 import sys
 import logging
+import getpass
 from test_config import TEST_KEY_CONFIG, PROJECT_ROOT
 
 # 添加项目根目录到Python路径
@@ -44,7 +45,15 @@ def generate_test_keys():
 
         # 保存AES密钥
         aes_key_path = os.path.join(keys_dir, TEST_KEY_CONFIG["aes_key_file"])
-        key_manager.save_aes_key(aes_key, aes_key_path, TEST_KEY_CONFIG["password"])
+
+        password = getpass.getpass("请输入密码以加密AES密钥 (直接回车则不加密): ")
+        if password:
+            confirm = getpass.getpass("确认密码: ")
+            if password != confirm:
+                logger.error("密码不匹配")
+                return False
+
+        key_manager.save_aes_key(aes_key, aes_key_path, password)
         logger.info(f"AES密钥已保存: {aes_key_path}")
 
         # 使用主配置中的 FHE 配置, 并修改密钥文件名
