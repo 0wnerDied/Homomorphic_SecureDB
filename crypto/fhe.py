@@ -27,7 +27,7 @@ class FHEManager:
         Args:
             config: 配置字典, 包含scheme, poly_modulus_degree, plain_modulus等参数
             key_manager: 密钥管理器实例
-            encrypt_only: 是否仅用于加密 (不需要私钥) 
+            encrypt_only: 是否仅用于加密 (不需要私钥)
         """
         self.config = config
         self.key_manager = key_manager
@@ -46,8 +46,11 @@ class FHEManager:
         self.relin_key_file = key_manager.get_key_path(
             config.get("relin_key_file", "relin.key")
         )
+        self.galois_key_file = key_manager.get_key_path(
+            config.get("galois_key_file", "galois.key")
+        )
 
-        # 缓存
+        # 简单的缓存
         self._encrypt_cache = {}
         self._decrypt_cache = {}
         self.cache_hits = 0
@@ -71,9 +74,14 @@ class FHEManager:
             # 设置加密参数 (BFV 方案)
             self.parms = seal.EncryptionParameters(seal.scheme_type.bfv)
             self.parms.set_poly_modulus_degree(self.config["poly_modulus_degree"])
+
             self.parms.set_coeff_modulus(
-                seal.CoeffModulus.BFVDefault(self.config["poly_modulus_degree"])
+                seal.CoeffModulus.Create(
+                    self.config["poly_modulus_degree"],
+                    self.config["coeff_modulus_bits"],
+                )
             )
+
             self.parms.set_plain_modulus(self.config["plain_modulus"])
 
             # 创建上下文
@@ -84,6 +92,7 @@ class FHEManager:
             self.public_key = keygen.create_public_key()
             self.secret_key = keygen.secret_key()
             self.relin_keys = keygen.create_relin_keys()
+            self.galois_keys = keygen.create_galois_keys()
 
             # 创建加密器、评估器和解密器
             self.encryptor = seal.Encryptor(self.context, self.public_key)
@@ -91,7 +100,7 @@ class FHEManager:
             if not self.encrypt_only:
                 self.decryptor = seal.Decryptor(self.context, self.secret_key)
 
-            # 创建批处理编码器 (IntegerEncoder已弃用)
+            # 创建批处理编码器
             self.encoder = seal.BatchEncoder(self.context)
 
             logger.info("FHE context initialized successfully")
@@ -111,10 +120,11 @@ class FHEManager:
             # 保存公钥
             self.public_key.save(self.public_key_file)
 
-            # 保存私钥和重线性化密钥
+            # 保存私钥、重线性化密钥和Galois密钥
             if not self.encrypt_only:
                 self.secret_key.save(self.private_key_file)
                 self.relin_keys.save(self.relin_key_file)
+                self.galois_keys.save(self.galois_key_file)
 
             logger.info("FHE keys saved successfully")
         except Exception as e:
@@ -143,7 +153,7 @@ class FHEManager:
             self.encryptor = seal.Encryptor(self.context, self.public_key)
             self.evaluator = seal.Evaluator(self.context)
 
-            # 创建批处理编码器 (替代IntegerEncoder)
+            # 创建批处理编码器
             self.encoder = seal.BatchEncoder(self.context)
 
             # 如果不是仅加密模式, 加载私钥和重线性化密钥
@@ -153,6 +163,10 @@ class FHEManager:
 
                 self.relin_keys = seal.RelinKeys()
                 self.relin_keys.load(self.context, self.relin_key_file)
+
+                self.galois_keys = seal.GaloisKeys()
+                if os.path.exists(self.galois_key_file):
+                    self.galois_keys.load(self.context, self.galois_key_file)
 
                 self.decryptor = seal.Decryptor(self.context, self.secret_key)
                 logger.info("Loaded all FHE keys")
@@ -183,7 +197,7 @@ class FHEManager:
             # 创建一个只包含一个值的向量
             values = np.array([value], dtype=np.int64)
 
-            # 编码整数 - 使用BatchEncoder替代IntegerEncoder
+            # 编码整数
             plain = self.encoder.encode(values)
 
             # 加密
@@ -240,6 +254,41 @@ class FHEManager:
             logger.error(f"Error decrypting integer: {e}")
             raise
 
+    def encrypt_string(self, text: str) -> List[bytes]:
+        """
+        加密字符串
+
+        Args:
+            text: 要加密的字符串
+
+        Returns:
+            加密字符的字节列表
+        """
+        result = []
+        for char in text:
+            encrypted = self.encrypt_int(ord(char))
+            result.append(encrypted)
+        return result
+
+    def decrypt_string(self, encrypted_chars: List[bytes]) -> str:
+        """
+        解密字符串
+
+        Args:
+            encrypted_chars: 加密字符的字节列表
+
+        Returns:
+            解密后的字符串
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot decrypt in encrypt-only mode")
+
+        result = []
+        for char_bytes in encrypted_chars:
+            char_code = self.decrypt_int(char_bytes)
+            result.append(chr(char_code))
+        return "".join(result)
+
     def compare_encrypted(self, encrypted_bytes: bytes, query_value: int) -> bool:
         """
         比较加密索引与查询值是否相等
@@ -259,65 +308,35 @@ class FHEManager:
             serialized = self.key_manager.decompress_data(encrypted_bytes)
             encrypted = self.context.from_cipher_str(serialized)
 
-            # 加密查询值
-            values = np.array([query_value], dtype=np.int64)
-            query_plain = self.encoder.encode(values)
-            query_encrypted = self.encryptor.encrypt(query_plain)
+            # 创建明文
+            plain = self.encoder.encode([query_value])
 
             # 计算差值
-            result = self.evaluator.sub(encrypted, query_encrypted)
+            diff = self.evaluator.sub_plain(encrypted, plain)
+
+            # 平方差值 - 如果相等，结果为0；否则不为0
+            squared = self.evaluator.square(diff)
+
+            # 重线性化
+            self.evaluator.relinearize_inplace(squared, self.relin_keys)
 
             # 解密结果
-            plain_result = self.decryptor.decrypt(result)
+            plain_result = self.decryptor.decrypt(squared)
 
             # 使用BatchEncoder解码
-            diff_array = self.encoder.decode(plain_result)
-            diff = int(diff_array[0])  # 获取第一个值
+            result_array = self.encoder.decode(plain_result)
+            result = int(result_array[0])  # 获取第一个值
 
-            return diff == 0
+            # 如果结果为0，则相等
+            return result == 0
         except Exception as e:
             logger.error(f"Error comparing encrypted values: {e}")
             raise
 
-    def encrypt_string(self, text: str) -> List[bytes]:
-        """
-        加密字符串
-
-        Args:
-            text: 要加密的字符串
-
-        Returns:
-            加密字符的字节列表
-        """
-        result = []
-        for char in text:
-            encrypted_char = self.encrypt_int(ord(char))
-            result.append(encrypted_char)
-        return result
-
-    def decrypt_string(self, encrypted_chars: List[bytes]) -> str:
-        """
-        解密字符串
-
-        Args:
-            encrypted_chars: 加密字符的字节列表
-
-        Returns:
-            解密后的字符串
-        """
-        if self.encrypt_only:
-            raise ValueError("Cannot decrypt in encrypt-only mode")
-
-        result = []
-        for enc_char in encrypted_chars:
-            ascii_val = self.decrypt_int(enc_char)
-            result.append(chr(ascii_val))
-        return "".join(result)
-
     def clear_cache(self):
         """清除缓存"""
-        self._encrypt_cache.clear()
-        self._decrypt_cache.clear()
+        self._encrypt_cache = {}
+        self._decrypt_cache = {}
         self.cache_hits = 0
 
     def encrypt_for_range_query(self, value: int, bits: int = 32) -> List[bytes]:
@@ -333,12 +352,12 @@ class FHEManager:
         """
         # 将整数转换为二进制表示
         binary = bin(value)[2:].zfill(bits)
-        bit_values = [int(b) for b in binary]
 
         # 加密每一位
         encrypted_bits = []
-        for bit in bit_values:
-            encrypted_bit = self.encrypt_int(bit)
+        for bit in binary:
+            bit_value = int(bit)
+            encrypted_bit = self.encrypt_int(bit_value)
             encrypted_bits.append(encrypted_bit)
 
         return encrypted_bits
@@ -362,22 +381,40 @@ class FHEManager:
 
         # 将查询值转换为二进制表示
         query_binary = bin(query_value)[2:].zfill(bits)
-        query_bits = [int(b) for b in query_binary]
 
-        # 实现比较逻辑
-        # 注意: 这是一个简化实现, 实际的FHE比较需要更复杂的电路
-        for i in range(bits):
-            # 从最高位开始比较
-            enc_bit = self.decrypt_int(encrypted_bits[i])
-            query_bit = query_bits[i]
+        # 使用同态比较方法
+        try:
+            # 从高位到低位比较
+            for i in range(bits):
+                # 解压缩并加载当前位密文
+                serialized = self.key_manager.decompress_data(encrypted_bits[i])
+                enc_bit = self.context.from_cipher_str(serialized)
 
-            if enc_bit < query_bit:
-                return True
-            elif enc_bit > query_bit:
-                return False
+                # 获取查询值当前位
+                query_bit = int(query_binary[i])
 
-        # 如果所有位都相等, 则值相等
-        return False
+                # 创建查询位明文
+                query_plain = self.encoder.encode([query_bit])
+
+                # 如果当前位不同，可以确定大小关系
+                # 计算 enc_bit - query_bit
+                diff = self.evaluator.sub_plain(enc_bit, query_plain)
+
+                # 解密差值
+                plain_diff = self.decryptor.decrypt(diff)
+                diff_array = self.encoder.decode(plain_diff)
+                bit_diff = int(diff_array[0])
+
+                if bit_diff < 0:  # enc_bit < query_bit
+                    return True
+                elif bit_diff > 0:  # enc_bit > query_bit
+                    return False
+
+            # 如果所有位都相等，则值相等
+            return False
+        except Exception as e:
+            logger.error(f"Error in homomorphic less than comparison: {e}")
+            raise
 
     def compare_greater_than(
         self, encrypted_bits: List[bytes], query_value: int, bits: int = 32
@@ -398,21 +435,40 @@ class FHEManager:
 
         # 将查询值转换为二进制表示
         query_binary = bin(query_value)[2:].zfill(bits)
-        query_bits = [int(b) for b in query_binary]
 
-        # 实现比较逻辑
-        for i in range(bits):
-            # 从最高位开始比较
-            enc_bit = self.decrypt_int(encrypted_bits[i])
-            query_bit = query_bits[i]
+        # 使用同态比较方法
+        try:
+            # 从高位到低位比较
+            for i in range(bits):
+                # 解压缩并加载当前位密文
+                serialized = self.key_manager.decompress_data(encrypted_bits[i])
+                enc_bit = self.context.from_cipher_str(serialized)
 
-            if enc_bit > query_bit:
-                return True
-            elif enc_bit < query_bit:
-                return False
+                # 获取查询值当前位
+                query_bit = int(query_binary[i])
 
-        # 如果所有位都相等, 则值相等
-        return False
+                # 创建查询位明文
+                query_plain = self.encoder.encode([query_bit])
+
+                # 如果当前位不同，可以确定大小关系
+                # 计算 enc_bit - query_bit
+                diff = self.evaluator.sub_plain(enc_bit, query_plain)
+
+                # 解密差值
+                plain_diff = self.decryptor.decrypt(diff)
+                diff_array = self.encoder.decode(plain_diff)
+                bit_diff = int(diff_array[0])
+
+                if bit_diff > 0:  # enc_bit > query_bit
+                    return True
+                elif bit_diff < 0:  # enc_bit < query_bit
+                    return False
+
+            # 如果所有位都相等，则值相等
+            return False
+        except Exception as e:
+            logger.error(f"Error in homomorphic greater than comparison: {e}")
+            raise
 
     def compare_range(
         self,
@@ -436,18 +492,19 @@ class FHEManager:
         if self.encrypt_only:
             raise ValueError("Cannot compare in encrypt-only mode")
 
-        # 解密值进行比较 (在实际应用中, 应该使用同态操作而不是解密) 
-        value = 0
-        for i in range(bits):
-            bit = self.decrypt_int(encrypted_bits[i])
-            if bit:
-                value |= 1 << (bits - 1 - i)
+        # 检查下限
+        if min_value is not None:
+            less_than_min = self.compare_less_than(encrypted_bits, min_value, bits)
+            if less_than_min:
+                return False
 
-        # 检查范围
-        if min_value is not None and value < min_value:
-            return False
-        if max_value is not None and value > max_value:
-            return False
+        # 检查上限
+        if max_value is not None:
+            greater_than_max = self.compare_greater_than(
+                encrypted_bits, max_value, bits
+            )
+            if greater_than_max:
+                return False
 
         return True
 
