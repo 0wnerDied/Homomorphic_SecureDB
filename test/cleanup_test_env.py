@@ -102,7 +102,7 @@ def get_user_confirmation(prompt):
 
 
 def cleanup_test_output_files():
-    """清理测试生成的输出文件，需要用户确认"""
+    """清理测试生成的输出文件, 需要用户确认"""
     logger.info("准备清理测试生成的输出文件...")
 
     # 需要确认清理的测试文件
@@ -158,10 +158,10 @@ def cleanup_test_environment():
     print("测试环境清理工具")
     print("=" * 50)
 
-    # 无需确认，直接清理数据库和用户
+    # 无需确认, 直接清理数据库和用户
     db_success = cleanup_test_database()
 
-    # 无需确认，直接清理密钥文件
+    # 无需确认, 直接清理密钥文件
     keys_success = cleanup_test_keys()
 
     # 需要用户确认的测试输出文件清理
@@ -173,7 +173,7 @@ def cleanup_test_environment():
         return True
     else:
         logger.error("测试环境清理部分失败")
-        print("\n测试环境清理部分失败，请查看日志获取详情")
+        print("\n测试环境清理部分失败, 请查看日志获取详情")
         return False
 
 

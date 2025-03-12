@@ -316,7 +316,7 @@ class FHEManager:
             # 计算差值
             diff = self.evaluator.sub_plain(encrypted, plain)
 
-            # 平方差值 - 如果相等，结果为0；否则不为0
+            # 平方差值 - 如果相等, 结果为0；否则不为0
             squared = self.evaluator.square(diff)
 
             # 重线性化
@@ -329,7 +329,7 @@ class FHEManager:
             result_array = self.encoder.decode(plain_result)
             result = int(result_array[0])  # 获取第一个值
 
-            # 如果结果为0，则相等
+            # 如果结果为0, 则相等
             return result == 0
         except Exception as e:
             logger.error(f"Error comparing encrypted values: {e}")
@@ -397,7 +397,7 @@ class FHEManager:
                 # 创建查询位明文
                 query_plain = self.encoder.encode([query_bit])
 
-                # 如果当前位不同，可以确定大小关系
+                # 如果当前位不同, 可以确定大小关系
                 # 计算 enc_bit - query_bit
                 diff = self.evaluator.sub_plain(enc_bit, query_plain)
 
@@ -411,7 +411,7 @@ class FHEManager:
                 elif bit_diff > 0:  # enc_bit > query_bit
                     return False
 
-            # 如果所有位都相等，则值相等
+            # 如果所有位都相等, 则值相等
             return False
         except Exception as e:
             logger.error(f"Error in homomorphic less than comparison: {e}")
@@ -451,7 +451,7 @@ class FHEManager:
                 # 创建查询位明文
                 query_plain = self.encoder.encode([query_bit])
 
-                # 如果当前位不同，可以确定大小关系
+                # 如果当前位不同, 可以确定大小关系
                 # 计算 enc_bit - query_bit
                 diff = self.evaluator.sub_plain(enc_bit, query_plain)
 
@@ -465,7 +465,7 @@ class FHEManager:
                 elif bit_diff < 0:  # enc_bit < query_bit
                     return False
 
-            # 如果所有位都相等，则值相等
+            # 如果所有位都相等, 则值相等
             return False
         except Exception as e:
             logger.error(f"Error in homomorphic greater than comparison: {e}")

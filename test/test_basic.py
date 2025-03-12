@@ -58,8 +58,8 @@ def test_crud_operations():
         update_success = secure_db.update_record(record_id, updated_data)
 
         if update_success:
-            # 验证更新 - 需要重新获取记录，而不是使用缓存
-            # 先清除缓存，确保获取最新数据
+            # 验证更新 - 需要重新获取记录, 而不是使用缓存
+            # 先清除缓存, 确保获取最新数据
             secure_db.clear_caches()
 
             # 重新获取记录

@@ -163,7 +163,7 @@ class PerformanceTester:
 
         Args:
             iterations: 测试迭代次数
-            range_width: 范围宽度（上限与下限的差值）
+            range_width: 范围宽度 (上限与下限的差值)
         """
         if not self.customer_ids:
             logger.error("没有测试客户ID, 无法测试范围搜索性能")
@@ -173,7 +173,7 @@ class PerformanceTester:
             f"测试范围搜索性能 - {iterations} 次范围搜索, 范围宽度 {range_width}"
         )
 
-        # 对客户ID排序，方便构建有效范围
+        # 对客户ID排序, 方便构建有效范围
         sorted_ids = sorted(self.customer_ids)
 
         times = []

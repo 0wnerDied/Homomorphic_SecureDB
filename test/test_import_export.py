@@ -188,7 +188,7 @@ def test_import_all_records(original_record_ids, test_records, export_file):
         if import_count >= len(original_record_ids):
             logger.info(f"成功导入 {import_count} 条记录")
 
-            # 验证导入的数据 - 由于导入所有记录时可能有其他记录，所以我们只验证我们知道的记录
+            # 验证导入的数据 - 由于导入所有记录时可能有其他记录, 所以我们只验证我们知道的记录
             logger.info("验证部分导入记录...")
 
             # 搜索导入的记录
@@ -259,7 +259,7 @@ def test_export_import():
             specific_record_ids, specific_test_records, specific_export_file
         )
     else:
-        logger.error("特定记录导出失败或导出文件不存在，跳过导入测试")
+        logger.error("特定记录导出失败或导出文件不存在, 跳过导入测试")
         specific_import_success = False
 
     # 测试所有记录的导出
@@ -274,7 +274,7 @@ def test_export_import():
             all_record_ids, all_test_records, all_export_file
         )
     else:
-        logger.error("所有记录导出失败或导出文件不存在，跳过导入测试")
+        logger.error("所有记录导出失败或导出文件不存在, 跳过导入测试")
         all_import_success = False
 
     # 综合结果
