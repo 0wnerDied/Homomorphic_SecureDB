@@ -1,0 +1,8 @@
+numpy==2.0.2
+psycopg2==2.9.10
+pycryptodome==3.21.0
+SQLAlchemy==2.0.39
+SQLAlchemy-Utils==0.41.2
+typing_extensions==4.12.2
+xxhash==3.5.0
+zstandard==0.23.0
