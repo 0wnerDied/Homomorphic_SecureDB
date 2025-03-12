@@ -24,9 +24,9 @@ except ImportError as e:
 logger = logging.getLogger("数据导入导出测试")
 
 
-def test_export_import_specific_records():
-    """测试特定记录的导出和导入功能"""
-    logger.info("开始测试特定记录的导出和导入功能...")
+def test_export_specific_records():
+    """测试特定记录的导出功能"""
+    logger.info("开始测试特定记录的导出功能...")
     success = True
 
     try:
@@ -57,6 +57,27 @@ def test_export_import_specific_records():
                 f"导出特定记录失败, 预期 {len(record_ids)} 条, 实际导出 {export_count} 条"
             )
             success = False
+
+        if success:
+            logger.info("特定记录导出测试通过")
+        else:
+            logger.error("特定记录导出测试失败")
+
+        return success, record_ids, test_records, export_file
+
+    except Exception as e:
+        logger.error(f"特定记录导出测试出现异常: {e}")
+        return False, [], [], ""
+
+
+def test_import_specific_records(record_ids, test_records, export_file):
+    """测试特定记录的导入功能"""
+    logger.info("开始测试特定记录的导入功能...")
+    success = True
+
+    try:
+        # 初始化安全数据库系统
+        secure_db = SecureDB(load_keys=True)
 
         # 删除原记录
         logger.info("删除原始记录...")
@@ -90,20 +111,20 @@ def test_export_import_specific_records():
             success = False
 
         if success:
-            logger.info("特定记录导入导出测试通过")
+            logger.info("特定记录导入测试通过")
         else:
-            logger.error("特定记录导入导出测试失败")
+            logger.error("特定记录导入测试失败")
 
         return success
 
     except Exception as e:
-        logger.error(f"特定记录导入导出测试出现异常: {e}")
+        logger.error(f"特定记录导入测试出现异常: {e}")
         return False
 
 
-def test_export_import_all_records():
-    """测试所有记录的导出和导入功能"""
-    logger.info("开始测试所有记录的导出和导入功能...")
+def test_export_all_records():
+    """测试所有记录的导出功能"""
+    logger.info("开始测试所有记录的导出功能...")
     success = True
 
     try:
@@ -135,18 +156,36 @@ def test_export_import_all_records():
             )
             success = False
 
-        # 记录当前记录ID，用于后续删除
-        original_record_ids = record_ids.copy()
+        if success:
+            logger.info("所有记录导出测试通过")
+        else:
+            logger.error("所有记录导出测试失败")
+
+        return success, record_ids, test_records, export_file
+
+    except Exception as e:
+        logger.error(f"所有记录导出测试出现异常: {e}")
+        return False, [], [], ""
+
+
+def test_import_all_records(original_record_ids, test_records, export_file):
+    """测试所有记录的导入功能"""
+    logger.info("开始测试所有记录的导入功能...")
+    success = True
+
+    try:
+        # 初始化安全数据库系统
+        secure_db = SecureDB(load_keys=True)
 
         # 删除原记录
         logger.info("删除原始记录...")
-        secure_db.delete_records_batch(record_ids)
+        secure_db.delete_records_batch(original_record_ids)
 
         # 导入所有数据
         logger.info(f"从文件导入所有记录: {export_file}")
         import_count = secure_db.import_data(export_file, enable_range_query=True)
 
-        if import_count >= len(record_ids):
+        if import_count >= len(original_record_ids):
             logger.info(f"成功导入 {import_count} 条记录")
 
             # 验证导入的数据 - 由于导入所有记录时可能有其他记录，所以我们只验证我们知道的记录
@@ -185,19 +224,19 @@ def test_export_import_all_records():
                 success = False
         else:
             logger.error(
-                f"导入所有记录失败, 至少应有 {len(record_ids)} 条, 实际导入 {import_count} 条"
+                f"导入所有记录失败, 至少应有 {len(original_record_ids)} 条, 实际导入 {import_count} 条"
             )
             success = False
 
         if success:
-            logger.info("所有记录导入导出测试通过")
+            logger.info("所有记录导入测试通过")
         else:
-            logger.error("所有记录导入导出测试失败")
+            logger.error("所有记录导入测试失败")
 
         return success
 
     except Exception as e:
-        logger.error(f"所有记录导入导出测试出现异常: {e}")
+        logger.error(f"所有记录导入测试出现异常: {e}")
         return False
 
 
@@ -205,14 +244,46 @@ def test_export_import():
     """测试数据导出和导入功能"""
     logger.info("开始综合测试数据导出和导入功能...")
 
-    # 测试特定记录的导出和导入
-    specific_success = test_export_import_specific_records()
+    # 测试特定记录的导出
+    (
+        specific_export_success,
+        specific_record_ids,
+        specific_test_records,
+        specific_export_file,
+    ) = test_export_specific_records()
 
-    # 测试所有记录的导出和导入
-    all_success = test_export_import_all_records()
+    # 确保导出文件存在
+    if specific_export_success and os.path.exists(specific_export_file):
+        # 测试特定记录的导入
+        specific_import_success = test_import_specific_records(
+            specific_record_ids, specific_test_records, specific_export_file
+        )
+    else:
+        logger.error("特定记录导出失败或导出文件不存在，跳过导入测试")
+        specific_import_success = False
+
+    # 测试所有记录的导出
+    all_export_success, all_record_ids, all_test_records, all_export_file = (
+        test_export_all_records()
+    )
+
+    # 确保导出文件存在
+    if all_export_success and os.path.exists(all_export_file):
+        # 测试所有记录的导入
+        all_import_success = test_import_all_records(
+            all_record_ids, all_test_records, all_export_file
+        )
+    else:
+        logger.error("所有记录导出失败或导出文件不存在，跳过导入测试")
+        all_import_success = False
 
     # 综合结果
-    if specific_success and all_success:
+    if (
+        specific_export_success
+        and specific_import_success
+        and all_export_success
+        and all_import_success
+    ):
         logger.info("所有数据导入导出测试全部通过")
         return True
     else:
