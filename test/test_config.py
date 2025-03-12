@@ -43,11 +43,13 @@ TEST_DATA_CONFIG = {
 
 # 测试密钥配置
 TEST_KEY_CONFIG = {
-    "keys_dir": os.path.join(PROJECT_ROOT, "test", "keys"),
-    "aes_key_file": "test_aes.key",
-    "fhe_public_key": "test_fhe_public.key",
-    "fhe_private_key": "test_fhe_private.key",
-    "password": "privacy_secure_pwd",  # 用于加密密钥的密码
+    "keys_dir": os.environ.get(
+        "SECURE_DB_KEYS_DIR", os.path.expanduser("~/.SecureDBKeys")
+    ),
+    "aes_key_file": "aes.key",
+    "fhe_public_key": "public.key",
+    "fhe_private_key": "secret.key",
+    "password": "",  # 用于加密密钥的密码
 }
 
 # 测试日志配置
