@@ -21,13 +21,22 @@ def run_script(script_name, description):
     start_time = time.time()
 
     try:
-        result = subprocess.run(
-            [sys.executable, script_path],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        # 对于需要用户交互的脚本，不捕获标准输入输出
+        if script_name == "cleanup_test_env.py":
+            print(f"\n正在运行 {description}...")
+            result = subprocess.run(
+                [sys.executable, script_path],
+                check=False,
+            )
+        else:
+            # 对于其他脚本，继续捕获输出
+            result = subprocess.run(
+                [sys.executable, script_path],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
 
         elapsed = time.time() - start_time
         success = result.returncode == 0
@@ -36,7 +45,8 @@ def run_script(script_name, description):
             logger.info(f"{description} 运行成功, 耗时: {elapsed:.2f}秒")
         else:
             logger.error(f"{description} 运行失败, 耗时: {elapsed:.2f}秒")
-            logger.error(f"错误输出: {result.stderr}")
+            if hasattr(result, "stderr"):
+                logger.error(f"错误输出: {result.stderr}")
 
         return success, elapsed
 
