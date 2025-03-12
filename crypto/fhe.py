@@ -7,7 +7,9 @@ import os
 import logging
 import numpy as np
 from typing import Dict, Any, List
+
 from .key_manager import KeyManager
+from core.utils import LRUCache
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,7 @@ class FHEManager:
         config: Dict[str, Any],
         key_manager: KeyManager,
         encrypt_only: bool = False,
+        cache_size: int = 2000,
     ):
         """
         初始化同态加密管理器
@@ -28,6 +31,7 @@ class FHEManager:
             config: 配置字典, 包含scheme, poly_modulus_degree, plain_modulus等参数
             key_manager: 密钥管理器实例
             encrypt_only: 是否仅用于加密 (不需要私钥)
+            cache_size: 缓存大小, 默认2000项
         """
         self.config = config
         self.key_manager = key_manager
@@ -50,10 +54,8 @@ class FHEManager:
             config.get("galois_key_file", "galois.key")
         )
 
-        # 简单的缓存
-        self._encrypt_cache = {}
-        self._decrypt_cache = {}
-        self.cache_hits = 0
+        self._encrypt_cache = LRUCache[str, bytes](capacity=cache_size)
+        self._decrypt_cache = LRUCache[str, int](capacity=cache_size)
 
         # 如果密钥文件存在, 加载它们；否则创建新的密钥
         if os.path.exists(self.context_file) and os.path.exists(self.public_key_file):
@@ -189,9 +191,9 @@ class FHEManager:
         """
         # 检查缓存
         cache_key = f"enc:{value}"
-        if cache_key in self._encrypt_cache:
-            self.cache_hits += 1
-            return self._encrypt_cache[cache_key]
+        cached_result = self._encrypt_cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
 
         try:
             # 创建一个只包含一个值的向量
@@ -208,7 +210,7 @@ class FHEManager:
             compressed = self.key_manager.compress_data(serialized)
 
             # 更新缓存
-            self._encrypt_cache[cache_key] = compressed
+            self._encrypt_cache.put(cache_key, compressed)
 
             return compressed
         except Exception as e:
@@ -230,9 +232,9 @@ class FHEManager:
 
         # 检查缓存
         cache_key = f"dec:{compressed_bytes.hex()[:32]}"
-        if cache_key in self._decrypt_cache:
-            self.cache_hits += 1
-            return self._decrypt_cache[cache_key]
+        cached_result = self._decrypt_cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
 
         try:
             # 解压缩并加载密文
@@ -247,7 +249,7 @@ class FHEManager:
             result = int(result_array[0])  # 获取第一个值并转换为int
 
             # 更新缓存
-            self._decrypt_cache[cache_key] = result
+            self._decrypt_cache.put(cache_key, result)
 
             return result
         except Exception as e:
@@ -335,9 +337,8 @@ class FHEManager:
 
     def clear_cache(self):
         """清除缓存"""
-        self._encrypt_cache = {}
-        self._decrypt_cache = {}
-        self.cache_hits = 0
+        self._encrypt_cache.clear()
+        self._decrypt_cache.clear()
 
     def encrypt_for_range_query(self, value: int, bits: int = 32) -> List[bytes]:
         """
