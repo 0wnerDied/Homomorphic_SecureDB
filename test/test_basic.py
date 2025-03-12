@@ -58,7 +58,11 @@ def test_crud_operations():
         update_success = secure_db.update_record(record_id, updated_data)
 
         if update_success:
-            # 验证更新
+            # 验证更新 - 需要重新获取记录，而不是使用缓存
+            # 先清除缓存，确保获取最新数据
+            secure_db.clear_caches()
+
+            # 重新获取记录
             retrieved_data = secure_db.get_record(record_id)
             if retrieved_data == updated_data:
                 logger.info("记录更新成功, 数据匹配")
@@ -85,7 +89,10 @@ def test_crud_operations():
         delete_success = secure_db.delete_record(record_id)
 
         if delete_success:
-            # 验证删除
+            # 验证删除 - 清除缓存确保获取最新状态
+            secure_db.clear_caches()
+
+            # 尝试获取已删除的记录
             deleted_data = secure_db.get_record(record_id)
             if deleted_data is None:
                 logger.info("记录删除成功")

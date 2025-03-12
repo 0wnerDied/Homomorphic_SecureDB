@@ -37,11 +37,13 @@ def test_batch_operations():
         batch_size = TEST_DATA_CONFIG["batch_size"]
         batch_records = []
         customer_ids = []
+        test_data_map = {}  # 存储原始测试数据，用于后续验证
 
         for _ in range(batch_size):
             customer_id = random.randint(*TEST_DATA_CONFIG["index_range"])
             customer_ids.append(customer_id)
             data = generate_privacy_test_data(customer_id)
+            test_data_map[customer_id] = data
             batch_records.append((customer_id, data, True))  # 启用范围查询
 
         # 测试批量添加
@@ -55,6 +57,8 @@ def test_batch_operations():
                 f"批量添加失败, 预期 {batch_size} 条, 实际添加 {len(record_ids)} 条"
             )
             success = False
+
+        secure_db.clear_caches()
 
         # 测试批量获取
         logger.info(f"测试批量获取 {len(record_ids)} 条记录")
@@ -70,9 +74,12 @@ def test_batch_operations():
 
         # 测试批量更新
         updated_batch = []
-        for record_id in record_ids:
-            customer_id = customer_ids[record_ids.index(record_id)]
+        updated_data_map = {}  # 存储更新后的数据，用于后续验证
+
+        for i, record_id in enumerate(record_ids):
+            customer_id = customer_ids[i]
             updated_data = generate_privacy_test_data(customer_id)
+            updated_data_map[record_id] = updated_data
             updated_batch.append((record_id, updated_data))
 
         logger.info(f"测试批量更新 {len(updated_batch)} 条记录")
@@ -80,6 +87,23 @@ def test_batch_operations():
 
         if updated_count == len(updated_batch):
             logger.info(f"批量更新成功, 更新了 {updated_count} 条记录")
+
+            # 清除缓存，确保获取最新数据
+            secure_db.clear_caches()
+
+            # 验证更新是否成功
+            verification_success = True
+            for record_id, expected_data in updated_data_map.items():
+                actual_data = secure_db.get_record(record_id)
+                if actual_data != expected_data:
+                    logger.error(f"记录 {record_id} 更新验证失败")
+                    verification_success = False
+
+            if verification_success:
+                logger.info("批量更新验证通过，所有记录数据已正确更新")
+            else:
+                logger.error("批量更新验证失败，部分记录数据未正确更新")
+                success = False
         else:
             logger.error(
                 f"批量更新失败, 预期更新 {len(updated_batch)} 条, 实际更新 {updated_count} 条"
@@ -92,6 +116,22 @@ def test_batch_operations():
 
         if deleted_count == len(record_ids):
             logger.info(f"批量删除成功, 删除了 {deleted_count} 条记录")
+
+            # 清除缓存，确保获取最新状态
+            secure_db.clear_caches()
+
+            # 验证删除是否成功
+            verification_success = True
+            for record_id in record_ids:
+                if secure_db.get_record(record_id) is not None:
+                    logger.error(f"记录 {record_id} 删除验证失败，仍能获取到记录")
+                    verification_success = False
+
+            if verification_success:
+                logger.info("批量删除验证通过，所有记录已成功删除")
+            else:
+                logger.error("批量删除验证失败，部分记录未成功删除")
+                success = False
         else:
             logger.error(
                 f"批量删除失败, 预期删除 {len(record_ids)} 条, 实际删除 {deleted_count} 条"
@@ -125,6 +165,9 @@ def test_range_query():
             data = generate_privacy_test_data(customer_id)
             record_id = secure_db.add_record(customer_id, data, enable_range_query=True)
             record_ids.append(record_id)
+
+        # 清除缓存，确保从数据库获取最新数据
+        secure_db.clear_caches()
 
         # 测试范围查询 - 完全包含
         start_id = base_customer_id
@@ -164,7 +207,23 @@ def test_range_query():
 
         # 清理测试记录
         logger.info("清理测试记录...")
-        secure_db.delete_records_batch(record_ids)
+        deleted_count = secure_db.delete_records_batch(record_ids)
+
+        # 清除缓存，确保从数据库获取最新状态
+        secure_db.clear_caches()
+
+        # 验证删除是否成功
+        verification_success = True
+        for record_id in record_ids:
+            if secure_db.get_record(record_id) is not None:
+                logger.error(f"记录 {record_id} 删除验证失败，仍能获取到记录")
+                verification_success = False
+
+        if verification_success:
+            logger.info("测试记录清理验证通过")
+        else:
+            logger.error("测试记录清理验证失败，部分记录未成功删除")
+            success = False
 
         return success
 
@@ -187,6 +246,9 @@ def test_cache_performance():
         customer_id = random.randint(*TEST_DATA_CONFIG["index_range"])
         data = generate_privacy_test_data(customer_id)
         record_id = secure_db.add_record(customer_id, data, enable_range_query=True)
+
+        # 清除缓存，确保首次访问不命中缓存
+        secure_db.clear_caches()
 
         # 测试缓存性能 - 首次访问
         logger.info("测试首次访问记录 (无缓存) ...")
@@ -211,6 +273,16 @@ def test_cache_performance():
 
         # 清理测试记录
         secure_db.delete_record(record_id)
+
+        # 清除缓存，确保从数据库获取最新状态
+        secure_db.clear_caches()
+
+        # 验证删除是否成功
+        if secure_db.get_record(record_id) is None:
+            logger.info("测试记录清理验证通过")
+        else:
+            logger.error("测试记录清理验证失败，仍能获取到记录")
+            success = False
 
         return success
 
