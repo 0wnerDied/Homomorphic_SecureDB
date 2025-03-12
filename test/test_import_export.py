@@ -4,6 +4,7 @@
 
 import os
 import sys
+import time
 import logging
 import random
 from test_config import PROJECT_ROOT, TEST_DATA_CONFIG
@@ -57,6 +58,24 @@ def test_export_import_specific_records():
                 f"导出特定记录失败, 预期 {len(record_ids)} 条, 实际导出 {export_count} 条"
             )
             success = False
+            
+        # 确保文件已完全写入磁盘
+        if not os.path.exists(export_file):
+            logger.info("等待导出文件写入完成...")
+            # 等待文件写入完成
+            wait_time = 0
+            while not os.path.exists(export_file) and wait_time < 5:  # 最多等待5秒
+                time.sleep(0.5)
+                wait_time += 0.5
+                
+            if not os.path.exists(export_file):
+                logger.error(f"导出文件 {export_file} 未创建")
+                return False
+                
+        # 确保文件不为空
+        if os.path.getsize(export_file) == 0:
+            logger.error(f"导出文件 {export_file} 为空")
+            return False
 
         # 删除原记录
         logger.info("删除原始记录...")
@@ -134,6 +153,24 @@ def test_export_import_all_records():
                 f"导出所有记录失败, 至少应有 {len(record_ids)} 条, 实际导出 {export_count} 条"
             )
             success = False
+            
+        # 确保文件已完全写入磁盘
+        if not os.path.exists(export_file):
+            logger.info("等待导出文件写入完成...")
+            # 等待文件写入完成
+            wait_time = 0
+            while not os.path.exists(export_file) and wait_time < 5:  # 最多等待5秒
+                time.sleep(0.5)
+                wait_time += 0.5
+                
+            if not os.path.exists(export_file):
+                logger.error(f"导出文件 {export_file} 未创建")
+                return False
+                
+        # 确保文件不为空
+        if os.path.getsize(export_file) == 0:
+            logger.error(f"导出文件 {export_file} 为空")
+            return False
 
         # 记录当前记录ID，用于后续删除
         original_record_ids = record_ids.copy()
