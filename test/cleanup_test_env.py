@@ -85,6 +85,7 @@ def cleanup_test_files():
         os.path.join(PROJECT_ROOT, "test", "performance_results.json"),
         os.path.join(PROJECT_ROOT, "test", "test_export_specific.json"),
         os.path.join(PROJECT_ROOT, "test", "test_export_all.json"),
+        os.path.join(PROJECT_ROOT, "test", "test.log"),
     ]
 
     for file_path in test_files:
