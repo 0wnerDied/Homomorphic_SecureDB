@@ -32,33 +32,59 @@ def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description="基于同态加密的安全数据库系统")
 
+    # 创建互斥操作组
+    operation_group = parser.add_mutually_exclusive_group(required=True)
+    operation_group.add_argument("--genkeys", action="store_true", help="生成新密钥")
+    operation_group.add_argument("--add", action="store_true", help="添加新记录")
+    operation_group.add_argument("--get", type=int, help="通过ID获取记录")
+    operation_group.add_argument("--search", type=int, help="通过索引值搜索记录")
+    operation_group.add_argument("--update", type=int, help="通过ID更新记录")
+    operation_group.add_argument("--delete", type=int, help="通过ID删除记录")
+    operation_group.add_argument(
+        "--cleanup", action="store_true", help="清理未使用的引用"
+    )
+    operation_group.add_argument(
+        "--clear-cache", action="store_true", help="清除所有缓存"
+    )
+    operation_group.add_argument(
+        "--cache-stats", action="store_true", help="显示缓存统计信息"
+    )
+    operation_group.add_argument(
+        "--range-search", action="store_true", help="执行范围搜索"
+    )
+    operation_group.add_argument(
+        "--export-data", action="store_true", help="导出数据到JSON文件"
+    )
+    operation_group.add_argument(
+        "--import-data", action="store_true", help="从JSON文件导入数据"
+    )
+    operation_group.add_argument(
+        "--export-records", action="store_true", help="导出特定记录"
+    )
+    operation_group.add_argument(
+        "--import-records", action="store_true", help="导入特定记录"
+    )
+
+    # 索引操作
+    operation_group.add_argument(
+        "--update-by-index", type=int, help="通过索引值更新记录"
+    )
+    operation_group.add_argument(
+        "--delete-by-index", type=int, help="通过索引值删除记录"
+    )
+    operation_group.add_argument(
+        "--update-by-range", action="store_true", help="通过索引范围更新记录"
+    )
+    operation_group.add_argument(
+        "--delete-by-range", action="store_true", help="通过索引范围删除记录"
+    )
+
     # 核心操作参数组
     core_group = parser.add_argument_group("核心操作")
-    core_group.add_argument("--genkeys", action="store_true", help="生成新密钥")
     core_group.add_argument(
         "--encrypt-only",
         action="store_true",
         help="仅加密模式 (只需要公钥) ",
-    )
-
-    # 记录操作参数组
-    record_group = parser.add_argument_group("记录操作")
-    record_group.add_argument("--add", action="store_true", help="添加新记录")
-    record_group.add_argument("--get", type=int, help="通过ID获取记录")
-    record_group.add_argument("--search", type=int, help="通过索引值搜索记录")
-    record_group.add_argument("--update", type=int, help="通过ID更新记录")
-    record_group.add_argument("--delete", type=int, help="通过ID删除记录")
-    record_group.add_argument("--cleanup", action="store_true", help="清理未使用的引用")
-
-    # 索引操作参数组
-    index_group = parser.add_argument_group("索引操作")
-    index_group.add_argument("--update-by-index", type=int, help="通过索引值更新记录")
-    index_group.add_argument("--delete-by-index", type=int, help="通过索引值删除记录")
-    index_group.add_argument(
-        "--update-by-range", action="store_true", help="通过索引范围更新记录"
-    )
-    index_group.add_argument(
-        "--delete-by-range", action="store_true", help="通过索引范围删除记录"
     )
 
     # 数据参数组
@@ -82,24 +108,14 @@ def parse_args():
 
     # 导入导出参数组
     io_group = parser.add_argument_group("导入导出")
-    io_group.add_argument("--export", type=str, help="导出数据到JSON文件")
+    io_group.add_argument("--export", type=str, help="导出数据的文件路径")
     io_group.add_argument(
-        "--import", dest="import_file", type=str, help="从JSON文件导入数据"
+        "--import", dest="import_file", type=str, help="导入数据的文件路径"
     )
     io_group.add_argument(
         "--include-encrypted",
         action="store_true",
         help="在导出中包含加密数据",
-    )
-    io_group.add_argument(
-        "--export-records",
-        action="store_true",
-        help="导出特定记录 (需要 --ids 和 --export 参数)",
-    )
-    io_group.add_argument(
-        "--import-records",
-        action="store_true",
-        help="导入特定记录 (使用 --import 指定文件)",
     )
 
     # 缓存相关参数组
@@ -107,41 +123,12 @@ def parse_args():
     cache_group.add_argument(
         "--cache-size", type=int, help="设置自定义缓存大小 (覆盖配置文件) "
     )
-    cache_group.add_argument("--clear-cache", action="store_true", help="清除所有缓存")
-    cache_group.add_argument(
-        "--cache-stats", action="store_true", help="显示缓存统计信息"
-    )
 
     return parser.parse_args()
 
 
 def validate_args(args):
     """验证命令行参数的有效性和互斥性"""
-    # 检查主要操作的互斥性
-    operations = sum(
-        [
-            args.genkeys,
-            args.add,
-            args.get is not None,
-            args.search is not None,
-            args.update is not None,
-            args.delete is not None,
-            args.cleanup,
-            args.export is not None or args.export_records,
-            args.import_file is not None or args.import_records,
-            args.update_by_index is not None,
-            args.delete_by_index is not None,
-            args.update_by_range,
-            args.delete_by_range,
-            args.clear_cache,
-            args.cache_stats,
-        ]
-    )
-
-    if operations == 0:
-        logger.warning("未指定操作。使用 --help 获取使用信息。")
-        return False
-
     # 检查添加操作所需参数
     if args.add and (args.index is None or args.data is None):
         logger.error("添加操作需要 --index 和 --data 参数")
@@ -163,7 +150,7 @@ def validate_args(args):
         return False
 
     # 检查范围操作所需参数
-    if (args.update_by_range or args.delete_by_range) and (
+    if (args.range_search or args.update_by_range or args.delete_by_range) and (
         args.min is None and args.max is None
     ):
         logger.error("范围操作需要至少一个范围参数 (--min 或 --max)")
@@ -192,6 +179,16 @@ def validate_args(args):
     # 检查导入特定记录参数
     if args.import_records and args.import_file is None:
         logger.error("导入特定记录需要 --import 参数")
+        return False
+
+    # 检查导出数据参数
+    if args.export_data and args.export is None:
+        logger.error("导出数据需要 --export 参数")
+        return False
+
+    # 检查导入数据参数
+    if args.import_data and args.import_file is None:
+        logger.error("导入数据需要 --import 参数")
         return False
 
     return True
@@ -287,6 +284,20 @@ def handle_record_operations(secure_db, args):
                 print("未找到匹配记录")
             return True
 
+        elif args.range_search:
+            # 范围搜索
+            min_val = args.min if args.min is not None else 0
+            max_val = args.max if args.max is not None else sys.maxsize
+            logger.info(f"范围搜索记录, 范围: [{min_val}, {max_val}]")
+            results = secure_db.search_by_range(min_val, max_val)
+            if results:
+                print(f"在指定范围内找到 {len(results)} 条记录:")
+                for result in results:
+                    print(f"记录 {result['id']}: {result['data']}")
+            else:
+                print("在指定范围内未找到记录")
+            return True
+
         elif args.update is not None:
             # 更新记录
             if args.batch and args.ids:
@@ -370,9 +381,9 @@ def handle_index_operations(secure_db, args):
 
         elif args.update_by_range:
             # 通过范围更新记录
-            min_val = args.min
-            max_val = args.max
-            range_str = f"[{min_val if min_val is not None else '*'}, {max_val if max_val is not None else '*'}]"
+            min_val = args.min if args.min is not None else 0
+            max_val = args.max if args.max is not None else sys.maxsize
+            range_str = f"[{min_val}, {max_val}]"
             logger.info(f"通过范围更新记录, 范围: {range_str}")
             updated_count = secure_db.update_by_range(args.data, min_val, max_val)
             if updated_count > 0:
@@ -383,9 +394,9 @@ def handle_index_operations(secure_db, args):
 
         elif args.delete_by_range:
             # 通过范围删除记录
-            min_val = args.min
-            max_val = args.max
-            range_str = f"[{min_val if min_val is not None else '*'}, {max_val if max_val is not None else '*'}]"
+            min_val = args.min if args.min is not None else 0
+            max_val = args.max if args.max is not None else sys.maxsize
+            range_str = f"[{min_val}, {max_val}]"
             logger.info(f"通过范围删除记录, 范围: {range_str}")
             deleted_count = secure_db.delete_by_range(min_val, max_val)
             if deleted_count > 0:
@@ -396,32 +407,6 @@ def handle_index_operations(secure_db, args):
 
     except Exception as e:
         logger.exception("处理索引操作时发生错误")
-        print(f"操作失败: {e}")
-        return False
-
-    return None
-
-
-def handle_range_search(secure_db, args):
-    """处理范围搜索操作"""
-    try:
-        if args.min is not None or args.max is not None:
-            # 只有当不是范围更新或删除操作时才执行范围搜索
-            if not (args.update_by_range or args.delete_by_range):
-                # 范围搜索
-                min_val = args.min if args.min is not None else 0
-                max_val = args.max if args.max is not None else sys.maxsize
-                logger.info(f"范围搜索记录, 范围: [{min_val}, {max_val}]")
-                results = secure_db.search_by_range(min_val, max_val)
-                if results:
-                    print(f"在指定范围内找到 {len(results)} 条记录:")
-                    for result in results:
-                        print(f"记录 {result['id']}: {result['data']}")
-                else:
-                    print("在指定范围内未找到记录")
-                return True
-    except Exception as e:
-        logger.exception("处理范围搜索时发生错误")
         print(f"操作失败: {e}")
         return False
 
@@ -458,7 +443,7 @@ def handle_import_export(secure_db, args):
             )
             return True
 
-        elif args.export:
+        elif args.export_data:
             # 导出所有数据
             logger.info(
                 f"导出所有数据, 文件: {args.export}, 包含加密数据: {args.include_encrypted}"
@@ -472,7 +457,7 @@ def handle_import_export(secure_db, args):
             print(f"已导出 {count} 条记录到 {args.export} (耗时: {elapsed:.2f}秒)")
             return True
 
-        elif args.import_file:
+        elif args.import_data:
             # 导入数据
             logger.info(
                 f"导入数据, 文件: {args.import_file}, 启用范围查询: {args.range}"
@@ -547,19 +532,15 @@ def main():
         if record_result is not None:
             return 0 if record_result else 1
 
-        # 处理范围搜索操作
-        range_search_result = handle_range_search(secure_db, args)
-        if range_search_result is not None:
-            return 0 if range_search_result else 1
-
         # 处理导入导出操作
         import_export_result = handle_import_export(secure_db, args)
         if import_export_result is not None:
             return 0 if import_export_result else 1
 
-        # 如果没有处理任何操作
+        # 如果没有处理任何操作 - 不应该到达这里，因为我们使用了required=True的互斥组
+        logger.warning("未执行任何操作，但参数解析通过。这可能是一个逻辑错误。")
         print("未执行任何操作。使用 --help 获取使用信息。")
-        return 0
+        return 1
 
     except ValueError as e:
         logger.exception("参数错误")
