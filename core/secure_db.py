@@ -214,6 +214,9 @@ class SecureDB:
         Returns:
             解密后的数据, 如果记录不存在则返回None
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot get existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -243,6 +246,9 @@ class SecureDB:
         Returns:
             记录ID到解密数据的映射, 如果记录不存在则值为None
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot get existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -360,6 +366,9 @@ class SecureDB:
         Returns:
             是否成功更新
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot update existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -390,6 +399,9 @@ class SecureDB:
         Returns:
             成功更新的记录数量
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot update existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -424,6 +436,9 @@ class SecureDB:
         Returns:
             是否成功删除
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot get existing data in encrypt-only mode")
+
         try:
             return self.db_manager.delete_record(record_id)
         except Exception as e:
@@ -440,6 +455,9 @@ class SecureDB:
         Returns:
             成功删除的记录数量
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot get existing data in encrypt-only mode")
+
         try:
             return self.db_manager.delete_records_batch(record_ids)
         except Exception as e:
@@ -470,6 +488,9 @@ class SecureDB:
         Returns:
             导出的记录数量
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot export existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -599,6 +620,9 @@ class SecureDB:
         Returns:
             导出的记录数量
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot export existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
