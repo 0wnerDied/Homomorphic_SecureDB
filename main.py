@@ -50,6 +50,17 @@ def parse_args():
     record_group.add_argument("--delete", type=int, help="通过ID删除记录")
     record_group.add_argument("--cleanup", action="store_true", help="清理未使用的引用")
 
+    # 索引操作参数组
+    index_group = parser.add_argument_group("索引操作")
+    index_group.add_argument("--update-by-index", type=int, help="通过索引值更新记录")
+    index_group.add_argument("--delete-by-index", type=int, help="通过索引值删除记录")
+    index_group.add_argument(
+        "--update-by-range", action="store_true", help="通过索引范围更新记录"
+    )
+    index_group.add_argument(
+        "--delete-by-range", action="store_true", help="通过索引范围删除记录"
+    )
+
     # 数据参数组
     data_group = parser.add_argument_group("数据参数")
     data_group.add_argument("--index", type=int, help="添加操作的索引值")
@@ -57,8 +68,8 @@ def parse_args():
     data_group.add_argument(
         "--range", action="store_true", help="为添加操作启用范围查询"
     )
-    data_group.add_argument("--min", type=int, help="范围搜索的最小值")
-    data_group.add_argument("--max", type=int, help="范围搜索的最大值")
+    data_group.add_argument("--min", type=int, help="范围操作的最小值")
+    data_group.add_argument("--max", type=int, help="范围操作的最大值")
 
     # 批量操作参数组
     batch_group = parser.add_argument_group("批量操作")
@@ -118,7 +129,10 @@ def validate_args(args):
             args.cleanup,
             args.export is not None or args.export_records,
             args.import_file is not None or args.import_records,
-            args.min is not None or args.max is not None,
+            args.update_by_index is not None,
+            args.delete_by_index is not None,
+            args.update_by_range,
+            args.delete_by_range,
             args.clear_cache,
             args.cache_stats,
         ]
@@ -136,6 +150,23 @@ def validate_args(args):
     # 检查更新操作所需参数
     if args.update is not None and args.data is None:
         logger.error("更新操作需要 --data 参数")
+        return False
+
+    # 检查通过索引更新操作所需参数
+    if args.update_by_index is not None and args.data is None:
+        logger.error("通过索引更新操作需要 --data 参数")
+        return False
+
+    # 检查通过范围更新操作所需参数
+    if args.update_by_range and args.data is None:
+        logger.error("通过范围更新操作需要 --data 参数")
+        return False
+
+    # 检查范围操作所需参数
+    if (args.update_by_range or args.delete_by_range) and (
+        args.min is None and args.max is None
+    ):
+        logger.error("范围操作需要至少一个范围参数 (--min 或 --max)")
         return False
 
     # 检查范围查询参数
@@ -256,20 +287,6 @@ def handle_record_operations(secure_db, args):
                 print("未找到匹配记录")
             return True
 
-        elif args.min is not None or args.max is not None:
-            # 范围搜索
-            min_val = args.min if args.min is not None else 0
-            max_val = args.max if args.max is not None else sys.maxsize
-            logger.info(f"范围搜索记录, 范围: [{min_val}, {max_val}]")
-            results = secure_db.search_by_range(min_val, max_val)
-            if results:
-                print(f"在指定范围内找到 {len(results)} 条记录:")
-                for result in results:
-                    print(f"记录 {result['id']}: {result['data']}")
-            else:
-                print("在指定范围内未找到记录")
-            return True
-
         elif args.update is not None:
             # 更新记录
             if args.batch and args.ids:
@@ -318,6 +335,93 @@ def handle_record_operations(secure_db, args):
 
     except Exception as e:
         logger.exception("处理记录操作时发生错误")
+        print(f"操作失败: {e}")
+        return False
+
+    return None
+
+
+def handle_index_operations(secure_db, args):
+    """处理索引相关操作"""
+    try:
+        if args.update_by_index is not None:
+            # 通过索引更新记录
+            logger.info(f"通过索引更新记录, 索引值: {args.update_by_index}")
+            updated_count = secure_db.update_by_index(args.update_by_index, args.data)
+            if updated_count > 0:
+                print(
+                    f"已通过索引值 {args.update_by_index} 更新 {updated_count} 条记录"
+                )
+            else:
+                print(f"未找到索引值为 {args.update_by_index} 的记录")
+            return True
+
+        elif args.delete_by_index is not None:
+            # 通过索引删除记录
+            logger.info(f"通过索引删除记录, 索引值: {args.delete_by_index}")
+            deleted_count = secure_db.delete_by_index(args.delete_by_index)
+            if deleted_count > 0:
+                print(
+                    f"已通过索引值 {args.delete_by_index} 删除 {deleted_count} 条记录"
+                )
+            else:
+                print(f"未找到索引值为 {args.delete_by_index} 的记录")
+            return True
+
+        elif args.update_by_range:
+            # 通过范围更新记录
+            min_val = args.min
+            max_val = args.max
+            range_str = f"[{min_val if min_val is not None else '*'}, {max_val if max_val is not None else '*'}]"
+            logger.info(f"通过范围更新记录, 范围: {range_str}")
+            updated_count = secure_db.update_by_range(args.data, min_val, max_val)
+            if updated_count > 0:
+                print(f"已在范围 {range_str} 内更新 {updated_count} 条记录")
+            else:
+                print(f"在范围 {range_str} 内未找到记录")
+            return True
+
+        elif args.delete_by_range:
+            # 通过范围删除记录
+            min_val = args.min
+            max_val = args.max
+            range_str = f"[{min_val if min_val is not None else '*'}, {max_val if max_val is not None else '*'}]"
+            logger.info(f"通过范围删除记录, 范围: {range_str}")
+            deleted_count = secure_db.delete_by_range(min_val, max_val)
+            if deleted_count > 0:
+                print(f"已在范围 {range_str} 内删除 {deleted_count} 条记录")
+            else:
+                print(f"在范围 {range_str} 内未找到记录")
+            return True
+
+    except Exception as e:
+        logger.exception("处理索引操作时发生错误")
+        print(f"操作失败: {e}")
+        return False
+
+    return None
+
+
+def handle_range_search(secure_db, args):
+    """处理范围搜索操作"""
+    try:
+        if args.min is not None or args.max is not None:
+            # 只有当不是范围更新或删除操作时才执行范围搜索
+            if not (args.update_by_range or args.delete_by_range):
+                # 范围搜索
+                min_val = args.min if args.min is not None else 0
+                max_val = args.max if args.max is not None else sys.maxsize
+                logger.info(f"范围搜索记录, 范围: [{min_val}, {max_val}]")
+                results = secure_db.search_by_range(min_val, max_val)
+                if results:
+                    print(f"在指定范围内找到 {len(results)} 条记录:")
+                    for result in results:
+                        print(f"记录 {result['id']}: {result['data']}")
+                else:
+                    print("在指定范围内未找到记录")
+                return True
+    except Exception as e:
+        logger.exception("处理范围搜索时发生错误")
         print(f"操作失败: {e}")
         return False
 
@@ -433,10 +537,20 @@ def main():
         if cache_result is not None:
             return 0 if cache_result else 1
 
+        # 处理索引操作
+        index_result = handle_index_operations(secure_db, args)
+        if index_result is not None:
+            return 0 if index_result else 1
+
         # 处理记录操作
         record_result = handle_record_operations(secure_db, args)
         if record_result is not None:
             return 0 if record_result else 1
+
+        # 处理范围搜索操作
+        range_search_result = handle_range_search(secure_db, args)
+        if range_search_result is not None:
+            return 0 if range_search_result else 1
 
         # 处理导入导出操作
         import_export_result = handle_import_export(secure_db, args)

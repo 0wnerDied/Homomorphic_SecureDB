@@ -289,6 +289,9 @@ class SecureDB:
         Returns:
             匹配记录的列表, 每个记录包含ID和解密后的数据
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot search existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -328,6 +331,9 @@ class SecureDB:
         Returns:
             匹配记录的列表, 每个记录包含ID和解密后的数据
         """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot search existing data in encrypt-only mode")
+
         try:
             start_time = time.time()
 
@@ -437,7 +443,7 @@ class SecureDB:
             是否成功删除
         """
         if self.fhe_manager.encrypt_only:
-            raise ValueError("Cannot get existing data in encrypt-only mode")
+            raise ValueError("Cannot delete existing data in encrypt-only mode")
 
         try:
             return self.db_manager.delete_record(record_id)
@@ -456,7 +462,7 @@ class SecureDB:
             成功删除的记录数量
         """
         if self.fhe_manager.encrypt_only:
-            raise ValueError("Cannot get existing data in encrypt-only mode")
+            raise ValueError("Cannot delete existing data in encrypt-only mode")
 
         try:
             return self.db_manager.delete_records_batch(record_ids)
@@ -718,4 +724,180 @@ class SecureDB:
                 return []
         except Exception as e:
             logger.error(f"导入记录失败: {e}")
+            raise
+
+    def update_by_index(self, index_value: int, new_data: str) -> int:
+        """
+        通过索引值更新记录数据
+
+        Args:
+            index_value: 索引值
+            new_data: 新数据
+
+        Returns:
+            成功更新的记录数量
+        """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot update existing data in encrypt-only mode")
+
+        try:
+            start_time = time.time()
+
+            # 搜索匹配索引的记录
+            records = self.db_manager.search_by_encrypted_index(
+                self.fhe_manager, index_value
+            )
+
+            if not records:
+                logger.info(f"未找到索引值为 {index_value} 的记录")
+                return 0
+
+            # 加密新数据
+            encrypted_data = self.aes_manager.encrypt(new_data)
+
+            # 更新找到的所有记录
+            updated_count = 0
+            for record in records:
+                success = self.db_manager.update_record(record.id, encrypted_data)
+                if success:
+                    updated_count += 1
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"通过索引更新记录, 索引值: {index_value}, 更新数量: {updated_count}, 耗时: {elapsed:.3f}秒"
+            )
+
+            return updated_count
+        except Exception as e:
+            logger.error(f"通过索引更新记录失败: {e}")
+            raise
+
+    def delete_by_index(self, index_value: int) -> int:
+        """
+        通过索引值删除记录
+
+        Args:
+            index_value: 索引值
+
+        Returns:
+            成功删除的记录数量
+        """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot delete existing data in encrypt-only mode")
+
+        try:
+            start_time = time.time()
+
+            # 搜索匹配索引的记录
+            records = self.db_manager.search_by_encrypted_index(
+                self.fhe_manager, index_value
+            )
+
+            if not records:
+                logger.info(f"未找到索引值为 {index_value} 的记录")
+                return 0
+
+            # 删除找到的所有记录
+            record_ids = [record.id for record in records]
+            deleted_count = self.db_manager.delete_records_batch(record_ids)
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"通过索引删除记录, 索引值: {index_value}, 删除数量: {deleted_count}, 耗时: {elapsed:.3f}秒"
+            )
+
+            return deleted_count
+        except Exception as e:
+            logger.error(f"通过索引删除记录失败: {e}")
+            raise
+
+    def delete_by_range(self, min_value: int = None, max_value: int = None) -> int:
+        """
+        通过索引范围删除记录
+
+        Args:
+            min_value: 范围最小值, 如果为None则不检查下限
+            max_value: 范围最大值, 如果为None则不检查上限
+
+        Returns:
+            成功删除的记录数量
+        """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot delete existing data in encrypt-only mode")
+
+        try:
+            start_time = time.time()
+
+            # 搜索匹配范围的记录
+            records = self.db_manager.search_by_range(
+                self.fhe_manager, min_value, max_value
+            )
+
+            if not records:
+                range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
+                logger.info(f"未找到范围 {range_str} 内的记录")
+                return 0
+
+            # 删除找到的所有记录
+            record_ids = [record.id for record in records]
+            deleted_count = self.db_manager.delete_records_batch(record_ids)
+
+            elapsed = time.time() - start_time
+            range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
+            logger.info(
+                f"通过范围删除记录, 范围: {range_str}, 删除数量: {deleted_count}, 耗时: {elapsed:.3f}秒"
+            )
+
+            return deleted_count
+        except Exception as e:
+            logger.error(f"通过范围删除记录失败: {e}")
+            raise
+
+    def update_by_range(
+        self, new_data: str, min_value: int = None, max_value: int = None
+    ) -> int:
+        """
+        通过索引范围更新记录
+
+        Args:
+            new_data: 新数据
+            min_value: 范围最小值, 如果为None则不检查下限
+            max_value: 范围最大值, 如果为None则不检查上限
+
+        Returns:
+            成功更新的记录数量
+        """
+        if self.fhe_manager.encrypt_only:
+            raise ValueError("Cannot update existing data in encrypt-only mode")
+
+        try:
+            start_time = time.time()
+
+            # 搜索匹配范围的记录
+            records = self.db_manager.search_by_range(
+                self.fhe_manager, min_value, max_value
+            )
+
+            if not records:
+                range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
+                logger.info(f"未找到范围 {range_str} 内的记录")
+                return 0
+
+            # 加密新数据
+            encrypted_data = self.aes_manager.encrypt(new_data)
+
+            # 更新找到的所有记录
+            record_ids = [record.id for record in records]
+            updates = [(record_id, encrypted_data) for record_id in record_ids]
+            updated_count = self.db_manager.update_records_batch(updates)
+
+            elapsed = time.time() - start_time
+            range_str = f"[{min_value if min_value is not None else '*'}, {max_value if max_value is not None else '*'}]"
+            logger.info(
+                f"通过范围更新记录, 范围: {range_str}, 更新数量: {updated_count}, 耗时: {elapsed:.3f}秒"
+            )
+
+            return updated_count
+        except Exception as e:
+            logger.error(f"通过范围更新记录失败: {e}")
             raise
