@@ -324,7 +324,7 @@ class PerformanceTester:
         # 保存性能测试结果
         results_file = os.path.join(PROJECT_ROOT, "test", "performance_results.json")
         with open(results_file, "w") as f:
-            json.dump(results, f, indent=2)
+            json.dump(results, f, indent=2, ensure_ascii=False)
         logger.info(f"性能测试结果已保存: {results_file}")
 
         return results
