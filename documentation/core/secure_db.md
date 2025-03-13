@@ -188,6 +188,45 @@ def update_records_batch(self, updates: List[Tuple[int, str]]) -> int
 **功能:**
 - 批量加密和更新多条记录
 
+##### 通过索引更新记录
+
+```python
+def update_by_index(self, index_value: int, new_data: str) -> int
+```
+
+**参数:**
+- `index_value`: 整数，索引值
+- `new_data`: 字符串，新数据
+
+**返回:**
+- 整数，成功更新的记录数量
+
+**功能:**
+- 搜索所有匹配指定索引值的记录
+- 使用AES加密新数据
+- 更新所有匹配记录
+- 返回成功更新的记录数量
+
+##### 通过范围更新记录
+
+```python
+def update_by_range(self, new_data: str, min_value: int = None, max_value: int = None) -> int
+```
+
+**参数:**
+- `new_data`: 字符串，新数据
+- `min_value`: 整数，范围最小值，如果为None则不检查下限
+- `max_value`: 整数，范围最大值，如果为None则不检查上限
+
+**返回:**
+- 整数，成功更新的记录数量
+
+**功能:**
+- 搜索所有在指定范围内的记录
+- 使用AES加密新数据
+- 批量更新所有匹配记录
+- 返回成功更新的记录数量
+
 #### 删除操作
 
 ##### 删除记录
@@ -219,6 +258,41 @@ def delete_records_batch(self, record_ids: List[int]) -> int
 
 **功能:**
 - 批量删除多条记录
+
+##### 通过索引删除记录
+
+```python
+def delete_by_index(self, index_value: int) -> int
+```
+
+**参数:**
+- `index_value`: 整数，索引值
+
+**返回:**
+- 整数，成功删除的记录数量
+
+**功能:**
+- 搜索所有匹配指定索引值的记录
+- 批量删除所有匹配记录
+- 返回成功删除的记录数量
+
+##### 通过范围删除记录
+
+```python
+def delete_by_range(self, min_value: int = None, max_value: int = None) -> int
+```
+
+**参数:**
+- `min_value`: 整数，范围最小值，如果为None则不检查下限
+- `max_value`: 整数，范围最大值，如果为None则不检查上限
+
+**返回:**
+- 整数，成功删除的记录数量
+
+**功能:**
+- 搜索所有在指定范围内的记录
+- 批量删除所有匹配记录
+- 返回成功删除的记录数量
 
 #### 维护操作
 
@@ -255,13 +329,12 @@ def export_data(self, output_file: str, include_encrypted: bool = False) -> int
 ##### 导出特定记录
 
 ```python
-def export_records(self, record_ids: List[int], output_file: str, include_encrypted: bool = False) -> int
+def export_records(self, record_ids: List[int], output_file: str) -> int
 ```
 
 **参数:**
 - `record_ids`: 整数列表，要导出的记录ID列表
 - `output_file`: 字符串，输出文件路径
-- `include_encrypted`: 布尔值，是否包含加密数据
 
 **返回:**
 - 整数，成功导出的记录数量
@@ -269,7 +342,6 @@ def export_records(self, record_ids: List[int], output_file: str, include_encryp
 **功能:**
 - 获取指定ID的记录并解密数据
 - 将数据导出到JSON文件
-- 可选择是否包含加密形式的数据
 - 适用于需要导出特定记录子集的场景
 
 ##### 导入所有数据
@@ -293,12 +365,11 @@ def import_data(self, input_file: str, enable_range_query: bool = False) -> int
 ##### 导入特定记录
 
 ```python
-def import_records(self, input_file: str, enable_range_query: bool = False) -> List[int]
+def import_records(self, input_file: str) -> List[int]
 ```
 
 **参数:**
 - `input_file`: 字符串，输入文件路径
-- `enable_range_query`: 布尔值，是否为导入的记录启用范围查询
 
 **返回:**
 - 整数列表，导入记录的ID列表
@@ -308,23 +379,6 @@ def import_records(self, input_file: str, enable_range_query: bool = False) -> L
 - 将记录导入到数据库系统
 - 返回新创建记录的ID列表，便于后续跟踪和操作
 - 适用于需要选择性导入特定记录的场景
-
-#### 索引值获取
-
-```python
-def get_index_value(self, record_id: int) -> Optional[int]
-```
-
-**参数:**
-- `record_id`: 整数，记录ID
-
-**返回:**
-- 整数，记录的索引值；如果记录不存在则返回None
-
-**功能:**
-- 获取并解密指定记录的索引值
-- 用于在不需要完整记录数据的情况下获取索引信息
-- 在验证导入/导出功能时特别有用
 
 ## 使用示例
 
@@ -349,6 +403,44 @@ print(f"找到 {len(range_results)} 条记录在范围 [30, 50] 内")
 # 导出数据
 exported_count = secure_db.export_data("backup.json")
 print(f"导出了 {exported_count} 条记录")
+```
+
+### 基于范围的操作示例
+
+```python
+# 初始化安全数据库系统（加载现有密钥）
+secure_db = SecureDB(load_keys=True)
+
+# 添加一些测试记录
+for i in range(1, 11):
+    secure_db.add_record(
+        index_value=i*10, 
+        data=f'{{"id":{i},"name":"Item {i}","value":{i*100}}}', 
+        enable_range_query=True
+    )
+
+# 通过范围更新记录
+updated_count = secure_db.update_by_range(
+    new_data='{"status":"on_sale","discount":0.2}',
+    min_value=30,
+    max_value=70
+)
+print(f"已更新 {updated_count} 条记录在范围 [30, 70] 内")
+
+# 通过索引更新记录
+updated_count = secure_db.update_by_index(
+    index_value=100,
+    new_data='{"status":"sold_out","available":false}'
+)
+print(f"已更新 {updated_count} 条索引值为 100 的记录")
+
+# 通过范围删除记录
+deleted_count = secure_db.delete_by_range(min_value=80)
+print(f"已删除 {deleted_count} 条索引值大于等于 80 的记录")
+
+# 通过索引删除记录
+deleted_count = secure_db.delete_by_index(index_value=20)
+print(f"已删除 {deleted_count} 条索引值为 20 的记录")
 ```
 
 ### 导出和导入特定记录
@@ -391,6 +483,7 @@ for record_id in imported_ids:
 - 批处理方法（`add_records_batch`、`get_records_batch`等）可以显著提高效率
 - 缓存机制有助于减少重复计算和数据库访问
 - 范围查询比精确索引查询更消耗资源
+- 基于范围的更新和删除操作会先执行范围查询，然后再执行批量操作，因此可能比直接操作更耗时
 - 导出和导入大量记录时，建议使用批处理方式进行处理，避免内存占用过高
 
 ## 安全注意事项
@@ -401,6 +494,7 @@ for record_id in imported_ids:
 - 在生产环境中应定期轮换密钥
 - 导出的数据文件可能包含敏感信息，应妥善保护
 - 导入数据时应验证数据来源的可靠性，避免导入恶意数据
+- 基于范围的操作可能会暴露更多数据模式，应谨慎使用
 
 ## 数据备份与恢复
 
@@ -412,3 +506,13 @@ for record_id in imported_ids:
 4. **增量备份策略**：可以结合索引值和时间戳实现增量备份
 
 建议定期执行备份操作，并将备份文件存储在安全的位置。在进行重大操作前，也应当创建备份以便在出现问题时能够恢复数据。
+
+## 索引操作的使用场景
+
+基于索引和范围的记录操作提供了更灵活的数据管理方式：
+
+1. **批量数据更新**：当需要更新满足特定条件的所有记录时，可以使用 `update_by_range()` 或 `update_by_index()`
+2. **数据清理**：使用 `delete_by_range()` 可以轻松删除过期或不再需要的数据
+3. **分类管理**：使用索引值对数据进行分类，然后对特定类别的数据执行批量操作
+4. **数据迁移**：在系统升级或数据结构变更时，可以使用这些方法对数据进行批量转换
+5. **状态更新**：例如，将所有在特定价格范围内的商品标记为促销状态
