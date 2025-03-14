@@ -798,8 +798,11 @@ class SecureDB:
                 return 0
 
             # 删除找到的所有记录
-            record_ids = [record.id for record in records]
-            deleted_count = self.db_manager.delete_records_batch(record_ids)
+            deleted_count = 0
+            for record in records:
+                success = self.db_manager.delete_record(record.id)
+                if success:
+                    deleted_count +=1
 
             elapsed = time.time() - start_time
             logger.info(
