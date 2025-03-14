@@ -34,12 +34,9 @@ def parse_args():
 
     # 创建互斥操作组
     operation_group = parser.add_mutually_exclusive_group(required=True)
+
+    # 系统操作
     operation_group.add_argument("--genkeys", action="store_true", help="生成新密钥")
-    operation_group.add_argument("--add", action="store_true", help="添加新记录")
-    operation_group.add_argument("--get", type=int, help="通过ID获取记录")
-    operation_group.add_argument("--search", type=int, help="通过索引值搜索记录")
-    operation_group.add_argument("--update", type=int, help="通过ID更新记录")
-    operation_group.add_argument("--delete", type=int, help="通过ID删除记录")
     operation_group.add_argument(
         "--cleanup", action="store_true", help="清理未使用的引用"
     )
@@ -49,9 +46,28 @@ def parse_args():
     operation_group.add_argument(
         "--cache-stats", action="store_true", help="显示缓存统计信息"
     )
+
+    # 基于索引的操作 (简化名称)
+    operation_group.add_argument("--add", action="store_true", help="添加新记录")
+    operation_group.add_argument("--search", type=int, help="通过索引值搜索记录")
     operation_group.add_argument(
         "--range-search", action="store_true", help="执行范围搜索"
     )
+    operation_group.add_argument("--update", type=int, help="通过索引值更新记录")
+    operation_group.add_argument("--delete", type=int, help="通过索引值删除记录")
+    operation_group.add_argument(
+        "--update-range", action="store_true", help="通过索引范围更新记录"
+    )
+    operation_group.add_argument(
+        "--delete-range", action="store_true", help="通过索引范围删除记录"
+    )
+
+    # 基于记录ID的操作 (扩展为xx_by_ID)
+    operation_group.add_argument("--get-by-id", type=int, help="通过ID获取记录")
+    operation_group.add_argument("--update-by-id", type=int, help="通过ID更新记录")
+    operation_group.add_argument("--delete-by-id", type=int, help="通过ID删除记录")
+
+    # 导入导出操作
     operation_group.add_argument(
         "--export-data", action="store_true", help="导出数据到JSON文件"
     )
@@ -63,20 +79,6 @@ def parse_args():
     )
     operation_group.add_argument(
         "--import-records", action="store_true", help="导入特定记录"
-    )
-
-    # 索引操作
-    operation_group.add_argument(
-        "--update-by-index", type=int, help="通过索引值更新记录"
-    )
-    operation_group.add_argument(
-        "--delete-by-index", type=int, help="通过索引值删除记录"
-    )
-    operation_group.add_argument(
-        "--update-by-range", action="store_true", help="通过索引范围更新记录"
-    )
-    operation_group.add_argument(
-        "--delete-by-range", action="store_true", help="通过索引范围删除记录"
     )
 
     # 核心操作参数组
@@ -134,23 +136,23 @@ def validate_args(args):
         logger.error("添加操作需要 --index 和 --data 参数")
         return False
 
-    # 检查更新操作所需参数
-    if args.update is not None and args.data is None:
-        logger.error("更新操作需要 --data 参数")
+    # 检查通过ID更新操作所需参数
+    if args.update_by_id is not None and args.data is None:
+        logger.error("通过ID更新操作需要 --data 参数")
         return False
 
     # 检查通过索引更新操作所需参数
-    if args.update_by_index is not None and args.data is None:
+    if args.update is not None and args.data is None:
         logger.error("通过索引更新操作需要 --data 参数")
         return False
 
     # 检查通过范围更新操作所需参数
-    if args.update_by_range and args.data is None:
+    if args.update_range and args.data is None:
         logger.error("通过范围更新操作需要 --data 参数")
         return False
 
     # 检查范围操作所需参数
-    if (args.range_search or args.update_by_range or args.delete_by_range) and (
+    if (args.range_search or args.update_range or args.delete_range) and (
         args.min is None and args.max is None
     ):
         logger.error("范围操作需要至少一个范围参数 (--min 或 --max)")
@@ -166,7 +168,11 @@ def validate_args(args):
     if (
         args.batch
         and (args.ids is None)
-        and (args.get is not None or args.update is not None or args.delete is not None)
+        and (
+            args.get_by_id is not None
+            or args.update_by_id is not None
+            or args.delete_by_id is not None
+        )
     ):
         logger.error("批量操作需要 --ids 参数")
         return False
@@ -239,17 +245,10 @@ def handle_cache_operations(secure_db, args):
     return None
 
 
-def handle_record_operations(secure_db, args):
-    """处理记录相关操作"""
+def handle_id_operations(secure_db, args):
+    """处理基于ID的记录操作"""
     try:
-        if args.add:
-            # 添加记录
-            record_id = secure_db.add_record(args.index, args.data, args.range)
-            logger.info(f"已添加记录, ID: {record_id}")
-            print(f"已添加记录, ID: {record_id}")
-            return True
-
-        elif args.get is not None:
+        if args.get_by_id is not None:
             # 获取记录
             if args.batch and args.ids:
                 # 批量获取
@@ -264,13 +263,77 @@ def handle_record_operations(secure_db, args):
                 return True
             else:
                 # 单条获取
-                logger.info(f"获取记录, ID: {args.get}")
-                data = secure_db.get_record(args.get)
+                logger.info(f"获取记录, ID: {args.get_by_id}")
+                data = secure_db.get_record(args.get_by_id)
                 if data:
-                    print(f"记录 {args.get}: {data}")
+                    print(f"记录 {args.get_by_id}: {data}")
                 else:
-                    print(f"记录 {args.get} 不存在")
+                    print(f"记录 {args.get_by_id} 不存在")
                 return True
+
+        elif args.update_by_id is not None:
+            # 更新记录
+            if args.batch and args.ids:
+                # 批量更新
+                record_ids = [int(id_str) for id_str in args.ids.split(",")]
+                updates = [(record_id, args.data) for record_id in record_ids]
+                logger.info(f"批量更新记录, IDs: {record_ids}")
+                updated_count = secure_db.update_records_batch(updates)
+                print(f"已更新 {updated_count} 条记录")
+                return True
+            else:
+                # 单条更新
+                logger.info(f"更新记录, ID: {args.update_by_id}")
+                success = secure_db.update_record(args.update_by_id, args.data)
+                if success:
+                    print(f"记录 {args.update_by_id} 更新成功")
+                else:
+                    print(f"记录 {args.update_by_id} 不存在")
+                return True
+
+        elif args.delete_by_id is not None:
+            # 删除记录
+            if args.batch and args.ids:
+                # 批量删除
+                record_ids = [int(id_str) for id_str in args.ids.split(",")]
+                logger.info(f"批量删除记录, IDs: {record_ids}")
+                deleted_count = secure_db.delete_records_batch(record_ids)
+                print(f"已删除 {deleted_count} 条记录")
+                return True
+            else:
+                # 单条删除
+                logger.info(f"删除记录, ID: {args.delete_by_id}")
+                success = secure_db.delete_record(args.delete_by_id)
+                if success:
+                    print(f"记录 {args.delete_by_id} 删除成功")
+                else:
+                    print(f"记录 {args.delete_by_id} 不存在")
+                return True
+
+        elif args.cleanup:
+            # 清理未使用的引用
+            logger.info("清理未使用的引用")
+            count = secure_db.cleanup_references()
+            print(f"已清理 {count} 个未使用的引用")
+            return True
+
+    except Exception as e:
+        logger.exception("处理基于ID的记录操作时发生错误")
+        print(f"操作失败: {e}")
+        return False
+
+    return None
+
+
+def handle_index_operations(secure_db, args):
+    """处理基于索引的操作"""
+    try:
+        if args.add:
+            # 添加记录
+            record_id = secure_db.add_record(args.index, args.data, args.range)
+            logger.info(f"已添加记录, ID: {record_id}")
+            print(f"已添加记录, ID: {record_id}")
+            return True
 
         elif args.search is not None:
             # 搜索记录
@@ -299,87 +362,26 @@ def handle_record_operations(secure_db, args):
             return True
 
         elif args.update is not None:
-            # 更新记录
-            if args.batch and args.ids:
-                # 批量更新
-                record_ids = [int(id_str) for id_str in args.ids.split(",")]
-                updates = [(record_id, args.data) for record_id in record_ids]
-                logger.info(f"批量更新记录, IDs: {record_ids}")
-                updated_count = secure_db.update_records_batch(updates)
-                print(f"已更新 {updated_count} 条记录")
-                return True
+            # 通过索引更新记录
+            logger.info(f"通过索引更新记录, 索引值: {args.update}")
+            updated_count = secure_db.update_by_index(args.update, args.data)
+            if updated_count > 0:
+                print(f"已通过索引值 {args.update} 更新 {updated_count} 条记录")
             else:
-                # 单条更新
-                logger.info(f"更新记录, ID: {args.update}")
-                success = secure_db.update_record(args.update, args.data)
-                if success:
-                    print(f"记录 {args.update} 更新成功")
-                else:
-                    print(f"记录 {args.update} 不存在")
-                return True
+                print(f"未找到索引值为 {args.update} 的记录")
+            return True
 
         elif args.delete is not None:
-            # 删除记录
-            if args.batch and args.ids:
-                # 批量删除
-                record_ids = [int(id_str) for id_str in args.ids.split(",")]
-                logger.info(f"批量删除记录, IDs: {record_ids}")
-                deleted_count = secure_db.delete_records_batch(record_ids)
-                print(f"已删除 {deleted_count} 条记录")
-                return True
-            else:
-                # 单条删除
-                logger.info(f"删除记录, ID: {args.delete}")
-                success = secure_db.delete_record(args.delete)
-                if success:
-                    print(f"记录 {args.delete} 删除成功")
-                else:
-                    print(f"记录 {args.delete} 不存在")
-                return True
-
-        elif args.cleanup:
-            # 清理未使用的引用
-            logger.info("清理未使用的引用")
-            count = secure_db.cleanup_references()
-            print(f"已清理 {count} 个未使用的引用")
-            return True
-
-    except Exception as e:
-        logger.exception("处理记录操作时发生错误")
-        print(f"操作失败: {e}")
-        return False
-
-    return None
-
-
-def handle_index_operations(secure_db, args):
-    """处理索引相关操作"""
-    try:
-        if args.update_by_index is not None:
-            # 通过索引更新记录
-            logger.info(f"通过索引更新记录, 索引值: {args.update_by_index}")
-            updated_count = secure_db.update_by_index(args.update_by_index, args.data)
-            if updated_count > 0:
-                print(
-                    f"已通过索引值 {args.update_by_index} 更新 {updated_count} 条记录"
-                )
-            else:
-                print(f"未找到索引值为 {args.update_by_index} 的记录")
-            return True
-
-        elif args.delete_by_index is not None:
             # 通过索引删除记录
-            logger.info(f"通过索引删除记录, 索引值: {args.delete_by_index}")
-            deleted_count = secure_db.delete_by_index(args.delete_by_index)
+            logger.info(f"通过索引删除记录, 索引值: {args.delete}")
+            deleted_count = secure_db.delete_by_index(args.delete)
             if deleted_count > 0:
-                print(
-                    f"已通过索引值 {args.delete_by_index} 删除 {deleted_count} 条记录"
-                )
+                print(f"已通过索引值 {args.delete} 删除 {deleted_count} 条记录")
             else:
-                print(f"未找到索引值为 {args.delete_by_index} 的记录")
+                print(f"未找到索引值为 {args.delete} 的记录")
             return True
 
-        elif args.update_by_range:
+        elif args.update_range:
             # 通过范围更新记录
             min_val = args.min if args.min is not None else 0
             max_val = args.max if args.max is not None else sys.maxsize
@@ -392,7 +394,7 @@ def handle_index_operations(secure_db, args):
                 print(f"在范围 {range_str} 内未找到记录")
             return True
 
-        elif args.delete_by_range:
+        elif args.delete_range:
             # 通过范围删除记录
             min_val = args.min if args.min is not None else 0
             max_val = args.max if args.max is not None else sys.maxsize
@@ -406,7 +408,7 @@ def handle_index_operations(secure_db, args):
             return True
 
     except Exception as e:
-        logger.exception("处理索引操作时发生错误")
+        logger.exception("处理基于索引的操作时发生错误")
         print(f"操作失败: {e}")
         return False
 
@@ -522,15 +524,15 @@ def main():
         if cache_result is not None:
             return 0 if cache_result else 1
 
-        # 处理索引操作
+        # 处理基于索引的操作
         index_result = handle_index_operations(secure_db, args)
         if index_result is not None:
             return 0 if index_result else 1
 
-        # 处理记录操作
-        record_result = handle_record_operations(secure_db, args)
-        if record_result is not None:
-            return 0 if record_result else 1
+        # 处理基于记录ID的操作
+        id_result = handle_id_operations(secure_db, args)
+        if id_result is not None:
+            return 0 if id_result else 1
 
         # 处理导入导出操作
         import_export_result = handle_import_export(secure_db, args)
