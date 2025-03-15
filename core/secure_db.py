@@ -77,10 +77,8 @@ class SecureDB:
                 logger.info("AES密钥加载成功")
             except Exception as e:
                 logger.error(f"加载AES密钥失败: {e}")
-                # 如果加载失败, 创建新的AES密钥
-                logger.info("创建新的AES密钥")
-                self.aes_manager = AESManager()
-                self._save_aes_key()
+                # 如果加载失败, 退出程序
+                logger.info("程序退出, 请先创建密钥或输入正确的密码")
         else:
             # 创建新的AES密钥
             self.aes_manager = AESManager()
