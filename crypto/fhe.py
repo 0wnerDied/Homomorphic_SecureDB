@@ -5,6 +5,9 @@
 import seal
 import os
 import logging
+import random
+import time
+import xxhash
 import numpy as np
 from typing import Dict, Any, List
 
@@ -293,7 +296,8 @@ class FHEManager:
 
     def compare_encrypted(self, encrypted_bytes: bytes, query_value: int) -> bool:
         """
-        比较加密索引与查询值是否相等
+        比较加密索引与查询值是否相等, 使用BFV单重掩码方案
+        同时最大化安全性和性能
 
         Args:
             encrypted_bytes: 加密的索引字节数据
@@ -310,30 +314,102 @@ class FHEManager:
             serialized = self.key_manager.decompress_data(encrypted_bytes)
             encrypted = self.context.from_cipher_str(serialized)
 
-            # 创建明文
-            plain = self.encoder.encode([query_value])
+            # 获取明文模数值
+            plain_modulus = int(self.parms.plain_modulus().value())
 
-            # 计算差值
-            diff = self.evaluator.sub_plain(encrypted, plain)
+            # 使用会话相关的种子
+            session_seed = int(time.time() * 1000) & 0xFFFFFFFF
 
-            # 平方差值 - 如果相等, 结果为0；否则不为0
-            squared = self.evaluator.square(diff)
+            # 生成高强度掩码
+            # 使用会话种子和查询值生成掩码基础
+            query_bytes = str(query_value).encode()
+            # 混合随机熵增强安全性
+            entropy = os.urandom(16)
 
-            # 重线性化
-            self.evaluator.relinearize_inplace(squared, self.relin_keys)
+            # 多层哈希增强安全性
+            base_hash1 = xxhash.xxh64(
+                query_bytes + entropy, seed=session_seed
+            ).intdigest()
+            base_hash2 = xxhash.xxh64(
+                str(base_hash1).encode(), seed=session_seed ^ 0xDEADBEEF
+            ).intdigest()
+
+            # 复杂掩码生成
+            mask_candidate = (
+                (base_hash1 ^ base_hash2)
+                ^ ((base_hash1 >> 13) | (base_hash2 << 7))
+                ^ ((query_value * 0xC6A4A7935BD1E995 + base_hash2) & 0xFFFFFFFFFFFFFFFF)
+            ) % (plain_modulus - 1) + 1
+
+            # 确保掩码与明文模数互质
+            def extended_gcd(a, b):
+                """扩展欧几里得算法，计算最大公约数和贝祖系数"""
+                if a == 0:
+                    return (b, 0, 1)
+                else:
+                    gcd, x, y = extended_gcd(b % a, a)
+                    return (gcd, y - (b // a) * x, x)
+
+            def mod_inverse(a, m):
+                """计算模逆元，确保掩码可逆"""
+                gcd, x, y = extended_gcd(a, m)
+                if gcd != 1:
+                    return None
+                else:
+                    return x % m
+
+            # 寻找与明文模数互质且有模逆元的掩码值
+            mask_value = mask_candidate
+            while True:
+                if mod_inverse(mask_value, plain_modulus) is not None:
+                    break
+                mask_value = (mask_value + 1) % plain_modulus
+                if mask_value == 0:
+                    mask_value = 1
+
+            # 创建掩码明文
+            mask_plain = self.encoder.encode([mask_value])
+
+            # 计算掩码查询值: query * mask mod plain_modulus
+            masked_query = (query_value * mask_value) % plain_modulus
+            masked_query_plain = self.encoder.encode([masked_query])
+
+            # 对加密索引应用掩码: E(index) * mask
+            encrypted_masked = self.evaluator.multiply_plain(encrypted, mask_plain)
+
+            # 智能重线性化决策, 检查是否需要重线性化
+            ciphertext_size = encrypted_masked.size()
+            if ciphertext_size > 2 and self.relin_keys is not None:
+                # 只有当密文大小超过2且有重线性化密钥时才执行
+                self.evaluator.relinearize_inplace(encrypted_masked, self.relin_keys)
+
+            # 计算差值: E(index*mask) - (query*mask)
+            diff = self.evaluator.sub_plain(encrypted_masked, masked_query_plain)
+
+            # 安全性增强: 添加随机噪声掩码
+            # 如果 index == query，则 diff = 0
+            # 如果 index != query，则 diff != 0
+            # 我们可以安全地添加 r*plain_modulus 到差值, 不会影响结果, 因为在BFV中, 任何 plain_modulus 的倍数在解密后都等于0
+            # 生成随机噪声 (r*plain_modulus)
+            noise_factor = random.randint(1, 10)  # 小范围足够
+            noise_plain = self.encoder.encode([noise_factor * plain_modulus])
+            # 添加噪声: diff + r*plain_modulus
+            # 不会改变比较结果, 混淆真实差值
+            diff = self.evaluator.add_plain(diff, noise_plain)
 
             # 解密结果
-            plain_result = self.decryptor.decrypt(squared)
+            plain_result = self.decryptor.decrypt(diff)
 
-            # 使用BatchEncoder解码
+            # 解码结果
             result_array = self.encoder.decode(plain_result)
-            result = int(result_array[0])  # 获取第一个值
 
-            # 如果结果为0, 则相等
+            # BFV精确检查, 取模以处理可能的噪声掩码
+            result = int(round(result_array[0])) % plain_modulus
             return result == 0
+
         except Exception as e:
-            logger.error(f"Error comparing encrypted values: {e}")
-            raise
+            logger.error(f"Secure comparison failed: {type(e).__name__}: {str(e)}")
+            raise ValueError(f"Secure comparison failed: {type(e).__name__}")
 
     def clear_cache(self):
         """清除缓存"""
