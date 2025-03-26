@@ -5,9 +5,6 @@
 import seal
 import os
 import logging
-import random
-import time
-import xxhash
 import numpy as np
 from typing import Dict, Any, List
 
@@ -294,14 +291,128 @@ class FHEManager:
             result.append(chr(char_code))
         return "".join(result)
 
-    def compare_encrypted(self, encrypted_bytes: bytes, query_value: int) -> bool:
+    def _compute_encrypted_comparison(
+        self, encrypted_index_bytes: bytes, encrypted_query_bytes: bytes
+    ) -> bytes:
         """
-        比较加密索引与查询值是否相等, 使用BFV单重掩码方案
-        同时最大化安全性和性能
+        计算两个加密值是否相等，但不解密结果
+        返回加密的比较结果供用户端解密判断
 
         Args:
-            encrypted_bytes: 加密的索引字节数据
-            query_value: 要比较的查询值
+            encrypted_index_bytes: 加密的索引字节数据
+            encrypted_query_bytes: 加密的查询值字节数据
+
+        Returns:
+            加密的比较结果字节数据
+        """
+        try:
+            # 解压缩并加载索引密文
+            serialized_index = self.key_manager.decompress_data(encrypted_index_bytes)
+            encrypted_index = self.context.from_cipher_str(serialized_index)
+
+            # 解压缩并加载查询密文
+            serialized_query = self.key_manager.decompress_data(encrypted_query_bytes)
+            encrypted_query = self.context.from_cipher_str(serialized_query)
+
+            # 获取明文模数值
+            plain_modulus = int(self.parms.plain_modulus().value())
+
+            # 掩码生成 - 直接生成1到plain_modulus-1之间的随机数
+            import secrets
+
+            mask_value = secrets.randbelow(plain_modulus - 1) + 1
+
+            # 创建掩码明文
+            mask_plain = self.encoder.encode([mask_value])
+
+            # 对加密索引应用掩码: E(index) * mask
+            encrypted_index_masked = self.evaluator.multiply_plain(
+                encrypted_index, mask_plain
+            )
+
+            # 对加密查询应用掩码: E(query) * mask
+            encrypted_query_masked = self.evaluator.multiply_plain(
+                encrypted_query, mask_plain
+            )
+
+            # 智能重线性化决策
+            if encrypted_index_masked.size() > 2 and self.relin_keys is not None:
+                self.evaluator.relinearize_inplace(
+                    encrypted_index_masked, self.relin_keys
+                )
+
+            if encrypted_query_masked.size() > 2 and self.relin_keys is not None:
+                self.evaluator.relinearize_inplace(
+                    encrypted_query_masked, self.relin_keys
+                )
+
+            # 计算差值: E(index*mask) - E(query*mask)
+            diff = self.evaluator.sub(encrypted_index_masked, encrypted_query_masked)
+
+            # 序列化并压缩加密的比较结果
+            serialized_diff = diff.to_string()
+            compressed_diff = self.key_manager.compress_data(serialized_diff)
+
+            return compressed_diff
+
+        except Exception as e:
+            logger.error(
+                f"Secure comparison calculation failed: {type(e).__name__}: {str(e)}"
+            )
+            # 使用通用错误消息，略过详细的错误信息
+            raise ValueError("Secure comparison calculation failed")
+
+    def _decrypt_comparison_result(self, encrypted_comparison_bytes: bytes) -> bool:
+        """
+        解密比较结果并判断是否相等
+
+        Args:
+            encrypted_comparison_bytes: 加密的比较结果字节数据
+
+        Returns:
+            如果相等返回True, 否则返回False
+        """
+        if self.encrypt_only:
+            raise ValueError("Cannot decrypt in encrypt-only mode")
+
+        try:
+            # 解压缩并加载比较结果密文
+            serialized_comparison = self.key_manager.decompress_data(
+                encrypted_comparison_bytes
+            )
+            encrypted_comparison = self.context.from_cipher_str(serialized_comparison)
+
+            # 解密结果
+            plain_result = self.decryptor.decrypt(encrypted_comparison)
+            result_array = self.encoder.decode(plain_result)
+
+            # 获取明文模数值
+            plain_modulus = int(self.parms.plain_modulus().value())
+            result = int(round(result_array[0])) % plain_modulus
+
+            # 常量时间的零值检测
+            is_zero = 1
+            for i in range(0x100):
+                is_zero &= ~((result >> i) & 1) & 1
+
+            return is_zero == 1
+
+        except Exception as e:
+            logger.error(
+                f"Comparison result decryption failed: {type(e).__name__}: {str(e)}"
+            )
+            raise ValueError("Comparison result decryption failed")
+
+    def compare_encrypted(
+        self, encrypted_index_bytes: bytes, encrypted_query_bytes: bytes
+    ) -> bool:
+        """
+        比较两个加密值是否相等, 使用BFV单重掩码方案
+        同时最大化安全性和性能，确保解密结果不被暴露
+
+        Args:
+            encrypted_index_bytes: 加密的索引字节数据
+            encrypted_query_bytes: 加密的查询值字节数据
 
         Returns:
             如果相等返回True, 否则返回False
@@ -310,106 +421,18 @@ class FHEManager:
             raise ValueError("Cannot compare in encrypt-only mode")
 
         try:
-            # 解压缩并加载密文
-            serialized = self.key_manager.decompress_data(encrypted_bytes)
-            encrypted = self.context.from_cipher_str(serialized)
+            # 计算加密的比较结果
+            encrypted_comparison = self._compute_encrypted_comparison(
+                encrypted_index_bytes, encrypted_query_bytes
+            )
 
-            # 获取明文模数值
-            plain_modulus = int(self.parms.plain_modulus().value())
-
-            # 使用会话相关的种子
-            session_seed = int(time.time() * 1000) & 0xFFFFFFFF
-
-            # 生成高强度掩码
-            # 使用会话种子和查询值生成掩码基础
-            query_bytes = str(query_value).encode()
-            # 混合随机熵增强安全性
-            entropy = os.urandom(16)
-
-            # 多层哈希增强安全性
-            base_hash1 = xxhash.xxh64(
-                query_bytes + entropy, seed=session_seed
-            ).intdigest()
-            base_hash2 = xxhash.xxh64(
-                str(base_hash1).encode(), seed=session_seed ^ 0xDEADBEEF
-            ).intdigest()
-
-            # 复杂掩码生成
-            mask_candidate = (
-                (base_hash1 ^ base_hash2)
-                ^ ((base_hash1 >> 13) | (base_hash2 << 7))
-                ^ ((query_value * 0xC6A4A7935BD1E995 + base_hash2) & 0xFFFFFFFFFFFFFFFF)
-            ) % (plain_modulus - 1) + 1
-
-            # 确保掩码与明文模数互质
-            def extended_gcd(a, b):
-                """扩展欧几里得算法，计算最大公约数和贝祖系数"""
-                if a == 0:
-                    return (b, 0, 1)
-                else:
-                    gcd, x, y = extended_gcd(b % a, a)
-                    return (gcd, y - (b // a) * x, x)
-
-            def mod_inverse(a, m):
-                """计算模逆元，确保掩码可逆"""
-                gcd, x, y = extended_gcd(a, m)
-                if gcd != 1:
-                    return None
-                else:
-                    return x % m
-
-            # 寻找与明文模数互质且有模逆元的掩码值
-            mask_value = mask_candidate
-            while True:
-                if mod_inverse(mask_value, plain_modulus) is not None:
-                    break
-                mask_value = (mask_value + 1) % plain_modulus
-                if mask_value == 0:
-                    mask_value = 1
-
-            # 创建掩码明文
-            mask_plain = self.encoder.encode([mask_value])
-
-            # 计算掩码查询值: query * mask mod plain_modulus
-            masked_query = (query_value * mask_value) % plain_modulus
-            masked_query_plain = self.encoder.encode([masked_query])
-
-            # 对加密索引应用掩码: E(index) * mask
-            encrypted_masked = self.evaluator.multiply_plain(encrypted, mask_plain)
-
-            # 智能重线性化决策, 检查是否需要重线性化
-            ciphertext_size = encrypted_masked.size()
-            if ciphertext_size > 2 and self.relin_keys is not None:
-                # 只有当密文大小超过2且有重线性化密钥时才执行
-                self.evaluator.relinearize_inplace(encrypted_masked, self.relin_keys)
-
-            # 计算差值: E(index*mask) - (query*mask)
-            diff = self.evaluator.sub_plain(encrypted_masked, masked_query_plain)
-
-            # 安全性增强: 添加随机噪声掩码
-            # 如果 index == query，则 diff = 0
-            # 如果 index != query，则 diff != 0
-            # 我们可以安全地添加 r*plain_modulus 到差值, 不会影响结果, 因为在BFV中, 任何 plain_modulus 的倍数在解密后都等于0
-            # 生成随机噪声 (r*plain_modulus)
-            noise_factor = random.randint(1, 10)  # 小范围足够
-            noise_plain = self.encoder.encode([noise_factor * plain_modulus])
-            # 添加噪声: diff + r*plain_modulus
-            # 不会改变比较结果, 混淆真实差值
-            diff = self.evaluator.add_plain(diff, noise_plain)
-
-            # 解密结果
-            plain_result = self.decryptor.decrypt(diff)
-
-            # 解码结果
-            result_array = self.encoder.decode(plain_result)
-
-            # BFV精确检查, 取模以处理可能的噪声掩码
-            result = int(round(result_array[0])) % plain_modulus
-            return result == 0
+            # 解密比较结果
+            return self._decrypt_comparison_result(encrypted_comparison)
 
         except Exception as e:
             logger.error(f"Secure comparison failed: {type(e).__name__}: {str(e)}")
-            raise ValueError(f"Secure comparison failed: {type(e).__name__}")
+            # 使用通用错误消息，略过详细的错误信息
+            raise ValueError("Secure comparison failed")
 
     def clear_cache(self):
         """清除缓存"""

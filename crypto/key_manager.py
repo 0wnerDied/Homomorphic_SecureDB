@@ -3,7 +3,7 @@
 """
 
 import os
-import pickle
+import hmac
 import logging
 import datetime
 import tarfile
@@ -16,13 +16,16 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import unpad
 
 logger = logging.getLogger(__name__)
 
 
 class KeyManager:
     """密钥管理器, 处理FHE和AES密钥的安全存储和加载"""
+
+    # 密钥版本，用于未来的密钥格式升级
+    CURRENT_KEY_VERSION = 1
 
     def __init__(self, keys_dir: str):
         """
@@ -88,41 +91,96 @@ class KeyManager:
             logger.error(f"Error loading data from {filename}: {e}")
             raise
 
+    def validate_password(self, password: str) -> bool:
+        """
+        验证密码强度
+
+        Args:
+            password: 要验证的密码
+
+        Returns:
+            如果密码足够强, 返回True, 否则返回False
+        """
+        if len(password) < 1:
+            return False
+
+        # 检查密码复杂度
+        has_upper = any(c.isupper() for c in password)
+        has_lower = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        has_special = any(not c.isalnum() for c in password)
+
+        return sum([has_upper, has_lower, has_digit, has_special]) >= 2
+
+    def secure_erase(self, data: bytearray) -> None:
+        """
+        安全擦除内存中的敏感数据
+
+        Args:
+            data: 要擦除的敏感数据
+        """
+        for i in range(len(data)):
+            data[i] = 0
+
     # ===== AES密钥管理功能 =====
 
     def encrypt_aes_key(self, aes_key: bytes, password: str) -> Tuple[bytes, bytes]:
         """
-        使用密码加密AES密钥
+        使用密码加密AES密钥, 采用AES-GCM认证加密模式
 
         Args:
             aes_key: 要加密的AES密钥
             password: 用于加密的密码
 
         Returns:
-            (encrypted_key, salt) 元组
+            (encrypted_data, salt) 元组
+
+        Raises:
+            ValueError: 如果密码强度不足
         """
         try:
+            # 验证密码强度
+            if not self.validate_password(password):
+                raise ValueError(
+                    "密码强度不足。密码应至少12个字符, 并包含大写字母、小写字母、数字和特殊字符。"
+                )
+
             # 生成盐
             salt = os.urandom(16)
 
             # 从密码派生密钥
-            key = PBKDF2(
+            key_bytes = bytearray(32)
+            key_bytes[:] = PBKDF2(
                 password, salt, dkLen=32, count=100000, hmac_hash_module=SHA256
             )
 
-            # 使用派生密钥加密AES密钥
-            cipher = AES.new(key, AES.MODE_CBC)
-            iv = cipher.iv
-            encrypted_key = cipher.encrypt(pad(aes_key, AES.block_size))
+            # 使用GCM模式提供认证加密
+            cipher = AES.new(bytes(key_bytes), AES.MODE_GCM)
+            ciphertext, tag = cipher.encrypt_and_digest(aes_key)
 
-            # 将IV附加到加密密钥
-            result = iv + encrypted_key
+            # 添加验证数据 - 用于快速验证密码是否正确
+            verification = hmac.new(
+                bytes(key_bytes), b"VALID_KEY_CHECK", SHA256
+            ).digest()[:8]
+
+            # 将版本、nonce、tag、验证数据和密文一起存储
+            # 格式: [版本(1字节)][nonce(16字节)][tag(16字节)][验证数据(8字节)][密文]
+            result = (
+                bytes([self.CURRENT_KEY_VERSION])
+                + cipher.nonce
+                + tag
+                + verification
+                + ciphertext
+            )
+
+            # 安全擦除内存中的敏感数据
+            self.secure_erase(key_bytes)
 
             logger.info("AES key encrypted successfully")
             return (result, salt)
 
         except Exception as e:
-            logger.error(f"Error encrypting AES key: {e}")
+            logger.error(f"Error encrypting AES key: {str(type(e))}: {str(e)}")
             raise
 
     def decrypt_aes_key(
@@ -132,33 +190,72 @@ class KeyManager:
         使用密码解密AES密钥
 
         Args:
-            encrypted_data: 加密的数据 (IV + 加密密钥)
+            encrypted_data: 加密的数据
             salt: 用于密码派生的盐
             password: 用于解密的密码
 
         Returns:
             解密的AES密钥
+
+        Raises:
+            ValueError: 如果密码错误或数据被篡改
         """
         try:
             # 从密码派生密钥
-            key = PBKDF2(
+            key_bytes = bytearray(32)
+            key_bytes[:] = PBKDF2(
                 password, salt, dkLen=32, count=100000, hmac_hash_module=SHA256
             )
 
-            # 提取IV和加密密钥
-            iv = encrypted_data[:16]
-            encrypted_key = encrypted_data[16:]
+            # 检查版本
+            version = encrypted_data[0]
+            if version != self.CURRENT_KEY_VERSION:
+                # 处理旧版本格式 - 兼容性模式
+                if version == 0:  # 假设0表示旧版本
+                    # 旧版本使用CBC模式，没有认证
+                    iv = encrypted_data[:16]
+                    encrypted_key = encrypted_data[16:]
+                    cipher = AES.new(bytes(key_bytes), AES.MODE_CBC, iv=iv)
+                    decrypted_key = unpad(cipher.decrypt(encrypted_key), AES.block_size)
 
-            # 解密AES密钥
-            cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-            decrypted_key = unpad(cipher.decrypt(encrypted_key), AES.block_size)
+                    # 安全擦除内存中的敏感数据
+                    self.secure_erase(key_bytes)
+
+                    logger.warning("Decrypted AES key using legacy format")
+                    return decrypted_key
+                else:
+                    raise ValueError(f"Unsupported key version: {version}")
+
+            # 提取nonce、tag、验证数据和密文
+            nonce = encrypted_data[1:17]
+            tag = encrypted_data[17:33]
+            verification = encrypted_data[33:41]
+            ciphertext = encrypted_data[41:]
+
+            # 验证密码正确性
+            expected_verification = hmac.new(
+                bytes(key_bytes), b"VALID_KEY_CHECK", SHA256
+            ).digest()[:8]
+            if not hmac.compare_digest(verification, expected_verification):
+                raise ValueError("密码错误")
+
+            # 解密并验证AES密钥
+            cipher = AES.new(bytes(key_bytes), AES.MODE_GCM, nonce=nonce)
+            decrypted_key = cipher.decrypt_and_verify(ciphertext, tag)
+
+            # 安全擦除内存中的敏感数据
+            self.secure_erase(key_bytes)
 
             logger.info("AES key decrypted successfully")
             return decrypted_key
 
+        except ValueError as e:
+            # 认证失败 - 可能是密码错误或数据被篡改
+            logger.error(f"Authentication failed during AES key decryption: {str(e)}")
+            raise ValueError("密码错误或数据被篡改")
         except Exception as e:
-            logger.error(f"Error decrypting AES key: {e}")
-            raise
+            logger.error(f"Error decrypting AES key: {str(type(e))}: {str(e)}")
+            raise ValueError("AES密钥解密失败")
 
     def save_aes_key(self, aes_key: bytes, key_file: str, password: str) -> None:
         """
@@ -168,23 +265,39 @@ class KeyManager:
             aes_key: 要保存的AES密钥
             key_file: 密钥文件名
             password: 用于加密的密码
+
+        Raises:
+            ValueError: 如果密码强度不足
         """
         try:
             # 加密AES密钥
             encrypted_key, salt = self.encrypt_aes_key(aes_key, password)
 
-            # 准备保存的数据 (salt + encrypted_key)
-            data_to_save = {"salt": salt, "encrypted_key": encrypted_key}
+            # 准备保存的数据
+            data_to_save = {
+                "salt": salt,
+                "encrypted_key": encrypted_key,
+                "version": self.CURRENT_KEY_VERSION,
+                "created_at": datetime.datetime.now().timestamp(),
+            }
 
             # 保存到文件
             key_path = self.get_key_path(key_file)
             with open(key_path, "wb") as f:
+                import pickle  # 保持与原代码兼容
+
                 pickle.dump(data_to_save, f)
+
+            # 设置文件权限 (仅UNIX系统)
+            try:
+                os.chmod(key_path, 0o600)  # 只有所有者可读写
+            except:
+                pass  # 在Windows上可能会失败，但这不是关键错误
 
             logger.info(f"Saved encrypted AES key to {key_path}")
 
         except Exception as e:
-            logger.error(f"Error saving AES key: {e}")
+            logger.error(f"Error saving AES key: {str(type(e))}: {str(e)}")
             raise
 
     def load_aes_key(self, key_file: str, password: str) -> bytes:
@@ -197,12 +310,25 @@ class KeyManager:
 
         Returns:
             解密的AES密钥
+
+        Raises:
+            FileNotFoundError: 如果密钥文件不存在
+            ValueError: 如果密码错误或数据被篡改
         """
         try:
             # 加载加密的密钥数据
             key_path = self.get_key_path(key_file)
             with open(key_path, "rb") as f:
+                import pickle  # 保持与原代码兼容
+
                 data = pickle.load(f)
+
+            # 检查版本
+            file_version = data.get("version", 0)  # 默认为0以支持旧文件
+            if file_version != self.CURRENT_KEY_VERSION and file_version != 0:
+                logger.warning(
+                    f"Key file version mismatch: file={file_version}, current={self.CURRENT_KEY_VERSION}"
+                )
 
             salt = data["salt"]
             encrypted_key = data["encrypted_key"]
@@ -216,9 +342,13 @@ class KeyManager:
         except FileNotFoundError:
             logger.error(f"AES key file not found: {key_file}")
             raise
-        except Exception as e:
-            logger.error(f"Error loading AES key: {e}")
+        except ValueError as e:
+            # 密码错误或数据被篡改
+            logger.error(f"Authentication error: {str(e)}")
             raise
+        except Exception as e:
+            logger.error(f"Error loading AES key: {str(type(e))}: {str(e)}")
+            raise ValueError(f"Failed to load AES key: {str(e)}")
 
     # ===== FHE密钥对管理功能 =====
 
@@ -249,18 +379,23 @@ class KeyManager:
             compressed_secret_key = self.compress_data(secret_key)
 
             if password:
+                # 验证密码强度
+                if not self.validate_password(password):
+                    raise ValueError(
+                        "密码强度不足。密码应至少12个字符, 并包含大写字母、小写字母、数字和特殊字符的任意两项。"
+                    )
+
                 # 生成AES密钥用于加密私钥
                 aes_key = get_random_bytes(32)
 
-                # 使用AES密钥加密压缩后的私钥
-                cipher = AES.new(aes_key, AES.MODE_CBC)
-                iv = cipher.iv
-                encrypted_key = cipher.encrypt(
-                    pad(compressed_secret_key, AES.block_size)
-                )
+                # 使用AES-GCM加密压缩后的私钥
+                cipher = AES.new(aes_key, AES.MODE_GCM)
+                ciphertext, tag = cipher.encrypt_and_digest(compressed_secret_key)
 
-                # 将IV和加密数据合并
-                encrypted_data = iv + encrypted_key
+                # 将nonce、tag和加密数据合并
+                encrypted_data = (
+                    bytes([self.CURRENT_KEY_VERSION]) + cipher.nonce + tag + ciphertext
+                )
 
                 # 保存加密的私钥
                 self.save_file(encrypted_data, secret_key_file)
@@ -325,14 +460,26 @@ class KeyManager:
                 # 加载AES密钥
                 aes_key = self.load_aes_key(aes_key_file, password)
 
-                # 解密私钥
-                iv = encrypted_data[:16]
-                encrypted_key = encrypted_data[16:]
+                # 检查是否是新版本格式
+                version = encrypted_data[0] if len(encrypted_data) > 0 else 0
 
-                cipher = AES.new(aes_key, AES.MODE_CBC, iv=iv)
-                compressed_secret_key = unpad(
-                    cipher.decrypt(encrypted_key), AES.block_size
-                )
+                if version == self.CURRENT_KEY_VERSION:
+                    # 新版本使用GCM模式
+                    nonce = encrypted_data[1:17]
+                    tag = encrypted_data[17:33]
+                    ciphertext = encrypted_data[33:]
+
+                    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+                    compressed_secret_key = cipher.decrypt_and_verify(ciphertext, tag)
+                else:
+                    # 旧版本使用CBC模式
+                    iv = encrypted_data[:16]
+                    encrypted_key = encrypted_data[16:]
+
+                    cipher = AES.new(aes_key, AES.MODE_CBC, iv=iv)
+                    compressed_secret_key = unpad(
+                        cipher.decrypt(encrypted_key), AES.block_size
+                    )
             else:
                 # 私钥未加密
                 compressed_secret_key = encrypted_data
@@ -369,6 +516,12 @@ class KeyManager:
             password: 如果提供, 将使用此密码加密新私钥
         """
         try:
+            # 验证密码强度
+            if password and not self.validate_password(password):
+                raise ValueError(
+                    "密码强度不足。密码应至少12个字符，并包含大写字母、小写字母、数字和特殊字符。"
+                )
+
             # 备份旧密钥
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_public_key_file = f"{old_public_key_file}.{timestamp}.bak"

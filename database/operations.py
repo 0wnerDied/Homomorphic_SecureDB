@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 import xxhash
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 from .models import EncryptedRecord, ReferenceTable, RangeQueryIndex, init_db
 from core.utils import LRUCache, timing_decorator
@@ -315,119 +315,173 @@ class DatabaseManager:
             session.close()
 
     @timing_decorator
+    def _prepare_encrypted_index_search(
+        self, fhe_manager, encrypted_query: bytes
+    ) -> Dict[int, bytes]:
+        """
+        准备同态加密索引查询，但不解密比较结果
+
+        Args:
+            fhe_manager: FHEManager实例, 用于计算加密比较结果
+            encrypted_query: 加密的查询值
+
+        Returns:
+            包含记录ID和对应加密比较结果的字典
+        """
+        # 为加密查询创建唯一标识符用于缓存
+        query_hash = xxhash.xxh64(encrypted_query).hexdigest()
+
+        # 检查缓存
+        cached_result = self.index_query_cache.get(query_hash)
+        if cached_result is not None:
+            logger.info(f"Cache hit: Using cached result for index query {query_hash}")
+            return {
+                id: None for id in cached_result
+            }  # 返回ID列表，值设为None表示已缓存
+
+        session = self.Session()
+        try:
+            all_records = session.query(EncryptedRecord).all()
+            comparison_results = {}
+
+            logger.info(f"Preparing encrypted index query")
+            for record in all_records:
+                # 计算加密的比较结果
+                encrypted_comparison = fhe_manager._compute_encrypted_comparison(
+                    record.encrypted_index, encrypted_query
+                )
+                comparison_results[record.id] = encrypted_comparison
+
+            logger.info(
+                f"Prepared comparison results for {len(comparison_results)} records"
+            )
+            return comparison_results
+        except SQLAlchemyError as e:
+            logger.error(f"Error preparing search: {e}")
+            raise
+        finally:
+            session.close()
+
+    @timing_decorator
     def search_by_encrypted_index(
-        self, fhe_manager, query_value: int
+        self, fhe_manager, encrypted_query: bytes
     ) -> List[EncryptedRecord]:
         """
         使用同态加密查询匹配的记录
 
         Args:
             fhe_manager: FHEManager实例, 用于比较加密索引
-            query_value: 要查询的索引值
+            encrypted_query: 加密的查询值
 
         Returns:
             匹配的记录列表
         """
+        # 为加密查询创建唯一标识符用于缓存
+        query_hash = xxhash.xxh64(encrypted_query).hexdigest()
+
         # 检查缓存
-        cached_result = self.index_query_cache.get(query_value)
+        cached_result = self.index_query_cache.get(query_hash)
         if cached_result is not None:
-            logger.info(f"Cache hit: Using cached result for index query {query_value}")
+            logger.info(f"Cache hit: Using cached result for index query {query_hash}")
             return self.get_records_by_ids(cached_result)
 
-        session = self.Session()
-        try:
-            all_records = session.query(EncryptedRecord).all()
-            matching_records = []
-            matching_ids = []
+        # 第一阶段：获取加密的比较结果
+        comparison_results = self._prepare_encrypted_index_search(
+            fhe_manager, encrypted_query
+        )
 
-            logger.info(f"Searching for records with index {query_value}")
-            for record in all_records:
-                # 使用同态加密比较索引
-                if fhe_manager.compare_encrypted(record.encrypted_index, query_value):
-                    matching_records.append(record)
-                    matching_ids.append(record.id)
+        # 第二阶段：解密比较结果并确定匹配记录
+        matching_record_ids = []
+        for record_id, encrypted_comparison in comparison_results.items():
+            # 如果值为None，表示这是来自缓存的记录ID，直接添加
+            if encrypted_comparison is None:
+                matching_record_ids.append(record_id)
+                continue
 
-                    # 更新记录缓存
-                    self.record_cache.put(record.id, record)
+            # 解密比较结果
+            is_match = fhe_manager._decrypt_comparison_result(encrypted_comparison)
+            if is_match:
+                matching_record_ids.append(record_id)
 
-            # 更新查询结果缓存
-            self.index_query_cache.put(query_value, matching_ids)
+        # 更新查询结果缓存
+        self.index_query_cache.put(query_hash, matching_record_ids)
 
-            logger.info(f"Found {len(matching_records)} matching records")
-            return matching_records
-        except SQLAlchemyError as e:
-            logger.error(f"Error searching records: {e}")
-            raise
-        finally:
-            session.close()
+        # 获取匹配记录
+        matching_records = []
+        if matching_record_ids:
+            matching_records = self.get_records_by_ids(matching_record_ids)
+
+        logger.info(f"Found {len(matching_records)} matching records")
+        return matching_records
 
     @timing_decorator
     def search_by_multiple_indices(
-        self, fhe_manager, query_values: List[int]
+        self, fhe_manager, encrypted_queries: List[bytes]
     ) -> List[EncryptedRecord]:
         """
         使用同态加密查询匹配多个索引值的记录
 
         Args:
             fhe_manager: FHEManager实例, 用于比较加密索引
-            query_values: 要查询的索引值列表
+            encrypted_queries: 加密的查询值列表
 
         Returns:
             匹配的记录列表
         """
         # 尝试从缓存获取每个查询值的结果
         all_matching_ids = set()
-        uncached_values = []
+        uncached_queries = []
+        query_hashes = []
 
-        for query_value in query_values:
-            cached_result = self.index_query_cache.get(query_value)
+        for encrypted_query in encrypted_queries:
+            query_hash = xxhash.xxh64(encrypted_query).hexdigest()
+            query_hashes.append(query_hash)
+
+            cached_result = self.index_query_cache.get(query_hash)
             if cached_result is not None:
                 all_matching_ids.update(cached_result)
             else:
-                uncached_values.append(query_value)
+                uncached_queries.append(encrypted_query)
 
         # 如果所有查询值都有缓存结果, 直接返回
-        if not uncached_values:
+        if not uncached_queries:
             logger.info(f"Cache hit: Using cached results for all index queries")
             return self.get_records_by_ids(list(all_matching_ids))
 
-        session = self.Session()
-        try:
-            all_records = session.query(EncryptedRecord).all()
-            matching_records = []
+        # 处理未缓存的查询
+        for encrypted_query in uncached_queries:
+            query_hash = xxhash.xxh64(encrypted_query).hexdigest()
 
-            # 为未缓存的查询值创建结果缓存
-            value_to_ids = {value: [] for value in uncached_values}
+            # 使用新的两阶段查询方法
+            # 第一阶段：获取加密的比较结果
+            comparison_results = self._prepare_encrypted_index_search(
+                fhe_manager, encrypted_query
+            )
 
-            logger.info(f"Searching for records with indices {query_values}")
-            for record in all_records:
-                # 对每个未缓存的查询值进行检查
-                for query_value in uncached_values:
-                    if fhe_manager.compare_encrypted(
-                        record.encrypted_index, query_value
-                    ):
-                        if record.id not in all_matching_ids:  # 避免重复
-                            matching_records.append(record)
-                            all_matching_ids.add(record.id)
+            # 第二阶段：解密比较结果并确定匹配记录
+            query_matching_ids = []
+            for record_id, encrypted_comparison in comparison_results.items():
+                # 如果值为None，表示这是来自缓存的记录ID，直接添加
+                if encrypted_comparison is None:
+                    query_matching_ids.append(record_id)
+                    continue
 
-                            # 更新记录缓存
-                            self.record_cache.put(record.id, record)
-
-                        # 更新查询值到ID的映射
-                        value_to_ids[query_value].append(record.id)
-                        break  # 一旦找到匹配, 就不再检查其他查询值
+                # 解密比较结果
+                is_match = fhe_manager._decrypt_comparison_result(encrypted_comparison)
+                if is_match:
+                    query_matching_ids.append(record_id)
+                    all_matching_ids.add(record_id)
 
             # 更新查询结果缓存
-            for query_value, ids in value_to_ids.items():
-                self.index_query_cache.put(query_value, ids)
+            self.index_query_cache.put(query_hash, query_matching_ids)
 
-            logger.info(f"Found {len(matching_records)} matching records")
-            return matching_records
-        except SQLAlchemyError as e:
-            logger.error(f"Error searching records: {e}")
-            raise
-        finally:
-            session.close()
+        # 获取匹配记录
+        matching_records = []
+        if all_matching_ids:
+            matching_records = self.get_records_by_ids(list(all_matching_ids))
+
+        logger.info(f"Found {len(matching_records)} matching records")
+        return matching_records
 
     @timing_decorator
     def search_by_range(

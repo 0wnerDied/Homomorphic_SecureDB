@@ -293,9 +293,11 @@ class SecureDB:
         try:
             start_time = time.time()
 
+            encrypted_query = self.fhe_manager.encrypt_int(index_value)
+
             # 搜索记录
             records = self.db_manager.search_by_encrypted_index(
-                self.fhe_manager, index_value
+                self.fhe_manager, encrypted_query
             )
 
             # 解密数据
@@ -741,9 +743,11 @@ class SecureDB:
         try:
             start_time = time.time()
 
+            encrypted_query = self.fhe_manager.encrypt_int(index_value)
+
             # 搜索匹配索引的记录
             records = self.db_manager.search_by_encrypted_index(
-                self.fhe_manager, index_value
+                self.fhe_manager, encrypted_query
             )
 
             if not records:
@@ -786,9 +790,11 @@ class SecureDB:
         try:
             start_time = time.time()
 
+            encrypted_query = self.fhe_manager.encrypt_int(index_value)
+
             # 搜索匹配索引的记录
             records = self.db_manager.search_by_encrypted_index(
-                self.fhe_manager, index_value
+                self.fhe_manager, encrypted_query
             )
 
             if not records:
@@ -800,7 +806,7 @@ class SecureDB:
             for record in records:
                 success = self.db_manager.delete_record(record.id)
                 if success:
-                    deleted_count +=1
+                    deleted_count += 1
 
             elapsed = time.time() - start_time
             logger.info(
